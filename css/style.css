@@ -24,38 +24,53 @@
 }
 
 .input-box{
+    display: flex;
+    justify-content: flex-end;
     width: 95%;
     height: 20%;
     background-color: rgb(255, 255, 255);
-    border-radius: 10px;
+    border-radius: 30px;
+
+}
+
+#inputBar{
+    border-radius: 30px;
+    text-align: end;
+
 }
 
 .input-box > input{
     height: 100%;
     width: 100%;
     text-align: center;
-    font-size: 58px;
+    font-size: 48px;
 }
 
+.row-4 > .alt-button, .row-4 > .button{
+    padding: 10px !important;
+    height: 30%;
+    width: 10%;
+}
+.row-4{
+    gap: 30px !important;
+}
 .function-buttons{
     display: flex;
     flex-direction: column;
     height: 80%;
     width: 95%;
+    padding: 10px 20px 20px 20px;
     background-color: rgb(196, 196, 196);
     border-radius: 10px;
 }
-.row-1, .row-2, .row-3, .row-4, .row-5, .row-6, .row-7{
+.row-4, .row-5, .row-6, .row-7, .row-8, .row-9, .row-10{
     display: flex;
     padding: 20px 0px 0px 0px ;
     width: 100%;
-    height: 14.2%;
     gap: 15px;
     justify-content: center;
 }
-.row-7{
-    margin-bottom: 20px;
-}
+
 .button{
     display: flex;
     justify-content: center;
@@ -67,7 +82,7 @@
 }
 
 .alt-button{
-    padding: 20px;
+    padding: 15px;
     width: 10%;
     background-color: rgb(193, 33, 33);
     border-radius: 10px;
@@ -78,27 +93,40 @@
     display: flex;
     justify-content: center;
     align-items: center;
-    padding: 15px;
     background-color: black;
     width: 10%;
+    height: 100%;
     border-radius: 10px;
     font-size: 40px;
+}
+
+.button-left > span, .button-right > span{
+    font-size: 21px;
 }
 .button-up, .button-down{
     position: relative;
     height: 100%;
     background-color: black;
-    width: 100%;
+    width: 10%;
     border-radius: 10px;
     font-size: 20px;
 }
 
-.vert-buttons{
+.row-1, .row-2, .row-3{
     display: flex;
-    flex-direction: column;
+    justify-content: center;
+    margin-bottom: 5px;
+}
+.arrow-horizontal-buttons{
+    display: flex;
+    justify-content: center;
     gap: 5px;
-    height: 100%;
-    width: 15%;
+    width: 100%;
+}
+
+.arrow-row-last{
+    display: flex;
+    justify-content: center;
 }
 
 .button:hover, .alt-button:hover, .button-left:hover, .button-right:hover, .button-down:hover, .button-up:hover{
@@ -106,3 +134,39 @@
     transition: 0.25s ease-in-out;
     cursor: pointer;
 }
+
+.row-5 > .button{
+    font-size: 12px;
+}
+
+@media only screen and (max-width: 915px) {
+    .calcu-body {
+        background-color: rgb(196, 196, 196);;
+    }
+
+    .button-down, .button-up, .button-left, .button-right{
+        width: 15%;
+    }
+
+    .row-4{
+        gap: 12px !important;
+    }
+
+    .row-6{
+        gap: 12px;
+    }
+    .row-6 > .button{
+        font-size: 10px;
+        width: 4%;
+    }
+
+    .button{
+        padding: 20px;
+        font-size: 12px;
+    }
+
+    .function-buttons{
+        padding: 0px 20px 20px 20px;
+    }
+
+  }
