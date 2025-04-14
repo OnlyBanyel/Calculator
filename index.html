@@ -1,85 +1,97 @@
-
-<head>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-</head>
-<link rel="stylesheet" href="../css/style.css">
-<script src="../vendors/jquery-3.7.1/jquery-3.7.1.min.js"></script>
-<section class="main-container">
-    <div class="calcu-body">
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Advanced Calculator</title>
+    <link rel="stylesheet" href="css/style.css" />
+    <script src="vendors//jquery-3.7.1/jquery-3.7.1.min.js"></script>
+  </head>
+  <body>
+    <section class="main-container">
+      <div class="calcu-body">
+        <div class="calculator-brand">
+          <span>CASIO</span>
+          <div class="solar-panel"></div>
+        </div>
         <div class="input-box">
-            <input type="text" name="inputBar" id="inputBar" disabled">
+          <input type="text" name="inputBar" id="inputBar" disabled value="0" />
+          <div id="memory-indicator">M</div>
+          <div id="history-indicator">HIST</div>
+          <div id="cursor-position"></div>
         </div>
 
         <div class="function-buttons">
+          <div class="arrow-row">
+            <div class="button-left calc-btn" id="left-arrow">
+              <span>&#8592;</span>
+            </div>
+            <div class="vert-buttons">
+              <div class="button-up calc-btn" id="up-arrow">
+                <span>&#8593;</span>
+              </div>
+              <div class="button-down calc-btn" id="down-arrow">
+                <span>&#8595;</span>
+              </div>
+            </div>
+            <div class="button-right calc-btn" id="right-arrow">
+              <span>&#8594;</span>
+            </div>
+          </div>
 
-        
-            <div class="arrow-function row-1">
-                
-                    <div class="button-up calc-btn"><span>&#8593;</span></div>
-                </div>
-
-                <div class="arrow-horizontal-buttons row-2">
-                    <div class="button-left calc-btn"><span>&#8592;</span></div>
-                    <div class="button-right calc-btn"><span>&#8594;</span></div>
-                </div>
-
-                <div class="arrow-row-last row-3">
-                    <div class="button-down calc-btn"><span>&#8595;</span></div>
-                </div>
-
-        
-
-            <div class="row-4">
-                <div class="button calc-btn alt-button">ON/CA</div>
-                <div class="button calc-btn alt-button">CI/C</div>
-                <div class="button calc-btn">TAX-</div>
-                <div class="button calc-btn">TAX+</div>
-                <div class="button calc-btn">%</div>
-            </div>
-            <div class="row-5">
-                <div class="button calc-btn">^n</div>
-                <div class="button calc-btn">ⁿₙ</div>
-                <div class="button calc-btn">DEL</div>
-                <div class="button calc-btn">(</div>
-                <div class="button calc-btn">)</div>
-            </div>
-            <div class="row-6">
-                <div class="button calc-btn">RM/CM</div>
-                <div class="button calc-btn">M+</div>
-                <div class="button calc-btn">M-</div>
-                <div class="button calc-btn">+/-</div>
-                <div class="button calc-btn">GT</div>
-            </div>
-            <div class="row-7">
-                <div class="button calc-btn">7</div>
-                <div class="button calc-btn">8</div>
-                <div class="button calc-btn">9</div>
-                <div class="button calc-btn">√</div>
-                <div class="button calc-btn">MU</div>
-            </div>
-            <div class="row-8">
-                <div class="button calc-btn">4</div>
-                <div class="button calc-btn">5</div>
-                <div class="button calc-btn">6</div>
-                <div class="button calc-btn">x</div>
-                <div class="button calc-btn">RV</div>
-            </div>
-            <div class="row-9">
-                <div class="button calc-btn">1</div>
-                <div class="button calc-btn">2</div>
-                <div class="button calc-btn">3</div>
-                <div class="button calc-btn">-</div>
-                <div class="button calc-btn">÷</div>
-            </div>
-            <div class="row-10">
-                <div class="button calc-btn">0</div>
-                <div class="button calc-btn">00</div>
-                <div class="button calc-btn">.</div>
-                <div class="button calc-btn">+</div>
-                <div class="button calc-btn">=</div>
-            </div>
-
+          <div class="row-1">
+            <div class="alt-button calc-btn" id="clear-all">ON/CA</div>
+            <div class="alt-button calc-btn" id="clear">C</div>
+            <div class="button calc-btn" id="memory-recall">MR</div>
+            <div class="button calc-btn" id="memory-clear">MC</div>
+            <div class="button calc-btn" id="square-root">√</div>
+          </div>
+          <div class="row-2">
+            <div class="button calc-btn" id="memory-plus">M+</div>
+            <div class="button calc-btn" id="memory-minus">M-</div>
+            <div class="button calc-btn" id="percent">%</div>
+            <div class="button calc-btn" id="power">^</div>
+            <div class="button calc-btn" id="factorial">x!</div>
+            <div class="button calc-btn" id="fraction">a/b</div>
+          </div>
+          <div class="row-3">
+            <div class="button calc-btn" id="sin">sin</div>
+            <div class="button calc-btn" id="cos">cos</div>
+            <div class="button calc-btn" id="tan">tan</div>
+            <div class="button calc-btn" id="pi">π</div>
+            <div class="button calc-btn" id="e">e</div>
+          </div>
+          <div class="row-4">
+            <div class="button calc-btn number" id="seven">7</div>
+            <div class="button calc-btn number" id="eight">8</div>
+            <div class="button calc-btn number" id="nine">9</div>
+            <div class="button calc-btn" id="delete">DEL</div>
+            <div class="button calc-btn" id="divide">÷</div>
+          </div>
+          <div class="row-5">
+            <div class="button calc-btn number" id="four">4</div>
+            <div class="button calc-btn number" id="five">5</div>
+            <div class="button calc-btn number" id="six">6</div>
+            <div class="button calc-btn" id="open-parenthesis">(</div>
+            <div class="button calc-btn" id="multiply">×</div>
+          </div>
+          <div class="row-6">
+            <div class="button calc-btn number" id="one">1</div>
+            <div class="button calc-btn number" id="two">2</div>
+            <div class="button calc-btn number" id="three">3</div>
+            <div class="button calc-btn" id="close-parenthesis">)</div>
+            <div class="button calc-btn" id="subtract">-</div>
+          </div>
+          <div class="row-7">
+            <div class="button calc-btn number" id="zero">0</div>
+            <div class="button calc-btn double-zero" id="double-zero">00</div>
+            <div class="button calc-btn" id="decimal">.</div>
+            <div class="button calc-btn" id="equals">=</div>
+            <div class="button calc-btn" id="add">+</div>
+          </div>
         </div>
-    </div>
-</section>
-<script src="/js/script.js"></script>
+      </div>
+    </section>
+    <script src="js/script.js"></script>
+  </body>
+</html>
