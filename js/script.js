@@ -3,7 +3,7 @@ $(document).ready(() => {
   const $display = $("#display")
   const $memoryIndicator = $("#memory-indicator")
   const $cursorPosition = $("#cursor-position")
-  const $fractionDisplay = $("#fraction-display")
+  const $muIndicator = $("#mu-indicator")
 
   // Calculator state
   let currentInput = "0"
@@ -12,18 +12,20 @@ $(document).ready(() => {
   let isCalculated = false
   let taxRate = 5 // Default tax rate of 5%
   let grandTotal = 0
-  const history = []
+  const history = [] // Will store objects with {equation, result}
   let historyIndex = -1
   let isViewingHistory = false
   let isSettingTaxRate = false
   let lastOperation = null
   let lastValue = null
-  let isFractionMode = false
-  let fractionNumerator = null
-  let fractionDenominator = null
   let displayScrollPosition = 0
+  let isMuMode = false // Ensure this is false by default
+  let muBaseValue = null
+  let currentEquation = "" // Track the current equation being built
 
-  // Initialize display
+  // Initialize display and indicators
+  $muIndicator.css("opacity", "0") // Explicitly hide MU indicator on initialization
+  $memoryIndicator.css("opacity", "0") // Hide memory indicator initially
   updateDisplay()
 
   // Helper functions
@@ -32,7 +34,7 @@ $(document).ready(() => {
     let displayValue = currentInput
 
     // Don't format if in special modes or if it's an error
-    if (!isSettingTaxRate && !isFractionMode && displayValue !== "Error") {
+    if (!isSettingTaxRate && displayValue !== "Error") {
       // Check if the input contains operators
       const hasOperators = /[+\-×÷^/()]/.test(displayValue)
 
@@ -66,30 +68,6 @@ $(document).ready(() => {
       }
     }
 
-    // Hide fraction display by default
-    $fractionDisplay.hide()
-
-    // Special display for fraction mode
-    if (isFractionMode) {
-      $display.val("")
-      $fractionDisplay.show()
-
-      // Update the fraction display
-      if (fractionNumerator === null) {
-        $("#fraction-numerator").text("n")
-      } else {
-        $("#fraction-numerator").text(fractionNumerator)
-      }
-
-      if (fractionDenominator === null) {
-        $("#fraction-denominator").text("d")
-      } else {
-        $("#fraction-denominator").text(fractionDenominator)
-      }
-    } else {
-      $display.val(displayValue)
-    }
-
     // Handle display scrolling for long inputs
     if (displayValue.length > 12) {
       // Calculate how much to scroll
@@ -108,6 +86,21 @@ $(document).ready(() => {
       $display.val(visibleText)
     } else {
       displayScrollPosition = 0
+      $display.val(displayValue)
+    }
+
+    // Update MU indicator - ensure it's only visible when in MU mode
+    if (isMuMode) {
+      $muIndicator.css("opacity", "1")
+    } else {
+      $muIndicator.css("opacity", "0")
+    }
+
+    // Update memory indicator
+    if (memory !== 0) {
+      $memoryIndicator.css("opacity", "1")
+    } else {
+      $memoryIndicator.css("opacity", "0")
     }
 
     // Position cursor indicator
@@ -126,10 +119,11 @@ $(document).ready(() => {
 
     $cursorPosition.css({
       right: rightPadding + charsFromRight * charWidth + "px",
-      display: isFractionMode ? "none" : "block",
+      display: "block",
     })
   }
 
+  // Helper function to format numbers with commas
   function formatNumberWithCommas(numStr) {
     // Don't format if it's not a valid number
     if (numStr === "" || isNaN(Number.parseFloat(numStr))) {
@@ -172,31 +166,54 @@ $(document).ready(() => {
       return
     }
 
-    if (isFractionMode) {
-      // In fraction mode, only allow numbers
-      if (!isNaN(text)) {
-        if (fractionNumerator === null) {
-          fractionNumerator = text
-        } else if (fractionDenominator === null) {
-          fractionDenominator = text
+    if (isMuMode) {
+      // In MU mode, only allow numbers and decimal
+      if (!isNaN(text) || text === ".") {
+        if (currentInput === "0") {
+          currentInput = text
         } else {
-          fractionDenominator += text
+          currentInput += text
         }
+        cursorIndex = currentInput.length
         updateDisplay()
       }
       return
     }
 
-    if (isCalculated) {
-      currentInput = text
-      cursorIndex = text.length
+    if (isViewingHistory) {
+      // Exit history view if entering new input
+      isViewingHistory = false
+      if (!isNaN(text) || text === ".") {
+        currentInput = text
+        currentEquation = text // Start a new equation
+        cursorIndex = 1
+      } else {
+        // For operators, keep the current value and add the operator
+        currentInput += text
+        currentEquation = currentInput // Update the equation
+        cursorIndex = currentInput.length
+      }
+    } else if (isCalculated) {
+      // If we just calculated a result and enter a number, start fresh
+      if (!isNaN(text) || text === ".") {
+        currentInput = text
+        currentEquation = text // Start a new equation
+        cursorIndex = 1
+      } else {
+        // For operators, keep the current value and add the operator
+        currentInput += text
+        currentEquation = currentInput // Update the equation
+        cursorIndex = currentInput.length
+      }
       isCalculated = false
     } else {
       if (currentInput === "0" && !isNaN(text) && text !== ".") {
         currentInput = text
+        currentEquation = text // Start a new equation
         cursorIndex = 1
       } else {
         currentInput = currentInput.slice(0, cursorIndex) + text + currentInput.slice(cursorIndex)
+        currentEquation = currentInput // Update the equation
         cursorIndex += text.length
       }
     }
@@ -209,12 +226,13 @@ $(document).ready(() => {
       return
     }
 
-    if (isFractionMode) {
-      exitFractionMode()
+    if (isMuMode) {
+      exitMuMode()
       return
     }
 
     currentInput = "0"
+    currentEquation = ""
     cursorIndex = 1
     isCalculated = false
     lastOperation = null
@@ -234,17 +252,22 @@ $(document).ready(() => {
       return
     }
 
-    if (isFractionMode) {
-      fractionNumerator = null
-      fractionDenominator = null
+    if (isMuMode) {
+      currentInput = "0"
+      cursorIndex = 1
       updateDisplay()
       return
+    }
+
+    if (isViewingHistory) {
+      isViewingHistory = false
     }
 
     if (isCalculated) {
       clearAll()
     } else {
       currentInput = "0"
+      currentEquation = ""
       cursorIndex = 1
       displayScrollPosition = 0
       updateDisplay()
@@ -262,45 +285,103 @@ $(document).ready(() => {
       return
     }
 
-    if (isFractionMode) {
-      if (fractionDenominator !== null && fractionDenominator.length > 0) {
-        fractionDenominator = fractionDenominator.slice(0, -1)
-        if (fractionDenominator === "") fractionDenominator = null
-      } else if (fractionNumerator !== null && fractionNumerator.length > 0) {
-        fractionNumerator = fractionNumerator.slice(0, -1)
-        if (fractionNumerator === "") fractionNumerator = null
+    if (isMuMode) {
+      if (currentInput.length > 1) {
+        currentInput = currentInput.slice(0, -1)
+        if (currentInput === "") {
+          currentInput = "0"
+        }
+        cursorIndex = currentInput.length
+        updateDisplay()
+      } else {
+        currentInput = "0"
+        cursorIndex = 1
+        updateDisplay()
       }
+      return
+    }
+
+    if (isViewingHistory) {
+      isViewingHistory = false
+      currentInput = "0"
+      currentEquation = ""
+      cursorIndex = 1
       updateDisplay()
       return
     }
 
     if (cursorIndex > 0) {
       currentInput = currentInput.slice(0, cursorIndex - 1) + currentInput.slice(cursorIndex)
+      currentEquation = currentInput // Update the equation
       cursorIndex--
       if (currentInput === "") {
         currentInput = "0"
+        currentEquation = ""
         cursorIndex = 1
       }
       updateDisplay()
     }
   }
 
+  // Replace the calculate function with this sequential calculation function
   function calculate() {
     if (isSettingTaxRate) {
       saveTaxRate()
       return
     }
 
-    if (isFractionMode) {
-      calculateFraction()
+    if (isMuMode) {
+      calculateMarkup()
       return
     }
 
-    try {
-      // Replace mathematical symbols with JavaScript operators
-      const expression = currentInput.replace(/×/g, "*").replace(/÷/g, "/").replace(/\^/g, "**")
+    if (isViewingHistory) {
+      isViewingHistory = false
+    }
 
-      const result = eval(expression)
+    try {
+      // Save the equation before calculating
+      const equation = currentInput
+
+      // Sequential calculation without PEMDAS
+      // Split the input by operators while keeping the operators
+      const tokens = currentInput.split(/([+\-×÷^/])/).filter((token) => token !== "")
+
+      // Process the tokens sequentially
+      let result = Number.parseFloat(tokens[0])
+      const intermediateResults = [result]
+      const intermediateEquations = [tokens[0]]
+
+      for (let i = 1; i < tokens.length; i += 2) {
+        const operator = tokens[i]
+        const operand = Number.parseFloat(tokens[i + 1])
+
+        // Perform the operation
+        switch (operator) {
+          case "+":
+            result += operand
+            break
+          case "-":
+            result -= operand
+            break
+          case "×":
+            result *= operand
+            break
+          case "÷":
+            result /= operand
+            break
+          case "^":
+            result = Math.pow(result, operand)
+            break
+          case "/":
+            result /= operand
+            break
+        }
+
+        // Save intermediate result and equation
+        intermediateResults.push(result)
+        intermediateEquations.push(intermediateEquations[intermediateEquations.length - 1] + operator + tokens[i + 1])
+      }
 
       if (isNaN(result) || !isFinite(result)) {
         currentInput = "Error"
@@ -317,8 +398,13 @@ $(document).ready(() => {
       isCalculated = true
       displayScrollPosition = 0
 
-      // Add to history
-      history.push(currentInput)
+      // Add to history - store equation, result, and intermediate results
+      history.push({
+        equation: equation,
+        result: currentInput,
+        intermediateResults: intermediateResults,
+        intermediateEquations: intermediateEquations,
+      })
       historyIndex = history.length
 
       updateDisplay()
@@ -329,6 +415,41 @@ $(document).ready(() => {
       currentInput = "Error"
       cursorIndex = currentInput.length
       updateDisplay()
+    }
+  }
+
+  function calculateMarkup() {
+    if (muBaseValue !== null) {
+      try {
+        const markupRate = Number.parseFloat(currentInput)
+        if (isNaN(markupRate)) {
+          currentInput = "Error"
+        } else {
+          const markupAmount = muBaseValue * (markupRate / 100)
+          const result = muBaseValue + markupAmount
+          currentInput = result.toString()
+        }
+
+        isMuMode = false
+        muBaseValue = null
+        cursorIndex = currentInput.length
+        isCalculated = true
+
+        // Add to history - store both equation and result
+        history.push({
+          equation: `${muBaseValue} + ${muBaseValue} × ${currentInput}/100`,
+          result: currentInput,
+        })
+        historyIndex = history.length
+
+        updateDisplay()
+      } catch (error) {
+        currentInput = "Error"
+        isMuMode = false
+        muBaseValue = null
+        cursorIndex = currentInput.length
+        updateDisplay()
+      }
     }
   }
 
@@ -368,6 +489,14 @@ $(document).ready(() => {
         cursorIndex = currentInput.length
         isCalculated = true
         displayScrollPosition = 0
+
+        // Add to history - store both equation and result
+        history.push({
+          equation: `${currentValue} ${lastOperation} ${lastValue}`,
+          result: currentInput,
+        })
+        historyIndex = history.length
+
         updateDisplay()
       } catch (error) {
         currentInput = "Error"
@@ -375,6 +504,31 @@ $(document).ready(() => {
         updateDisplay()
       }
     }
+  }
+
+  // MU mode functions
+  function enterMuMode() {
+    try {
+      muBaseValue = Number.parseFloat(currentInput)
+      if (isNaN(muBaseValue)) {
+        return
+      }
+
+      isMuMode = true
+      currentInput = "0"
+      cursorIndex = 1
+      updateDisplay()
+    } catch (error) {
+      // Handle error
+    }
+  }
+
+  function exitMuMode() {
+    isMuMode = false
+    muBaseValue = null
+    currentInput = "0"
+    cursorIndex = 1
+    updateDisplay()
   }
 
   // Tax rate modification functions
@@ -423,56 +577,6 @@ $(document).ready(() => {
     }
   }
 
-  // Fraction mode functions
-  function enterFractionMode() {
-    isFractionMode = true
-    fractionNumerator = null
-    fractionDenominator = null
-    updateDisplay()
-  }
-
-  function exitFractionMode() {
-    isFractionMode = false
-    fractionNumerator = null
-    fractionDenominator = null
-    currentInput = "0"
-    cursorIndex = 1
-    updateDisplay()
-  }
-
-  function calculateFraction() {
-    if (fractionNumerator !== null && fractionDenominator !== null) {
-      try {
-        const num = Number.parseFloat(fractionNumerator)
-        const denom = Number.parseFloat(fractionDenominator)
-
-        if (denom === 0) {
-          currentInput = "Error"
-        } else {
-          const result = num / denom
-          currentInput = result.toString()
-          if (currentInput.includes(".")) {
-            currentInput = currentInput.replace(/\.?0+$/, "")
-          }
-        }
-
-        isFractionMode = false
-        fractionNumerator = null
-        fractionDenominator = null
-        cursorIndex = currentInput.length
-        isCalculated = true
-        updateDisplay()
-      } catch (error) {
-        currentInput = "Error"
-        isFractionMode = false
-        fractionNumerator = null
-        fractionDenominator = null
-        cursorIndex = currentInput.length
-        updateDisplay()
-      }
-    }
-  }
-
   // Button click handlers
   // Fix: Only select number buttons that are not double-zero
   $(".number:not(#double-zero)").on("click", function () {
@@ -494,12 +598,16 @@ $(document).ready(() => {
       return
     }
 
-    if (isFractionMode) {
-      return // No decimals in fraction mode
+    if (isMuMode) {
+      // Only add decimal if there isn't one already
+      if (!currentInput.includes(".")) {
+        insertAtCursor(".")
+      }
+      return
     }
 
     // Check if there's already a decimal in the current number segment
-    const parts = currentInput.split(/[+\-×÷]/)
+    const parts = currentInput.split(/[+\-×÷^/()]/)
     const currentPart = parts[parts.length - 1]
 
     if (!currentPart.includes(".")) {
@@ -507,24 +615,40 @@ $(document).ready(() => {
     }
   })
 
-  $("#add, #subtract, #multiply, #divide").on("click", function () {
-    if (isSettingTaxRate || isFractionMode) return
+  $("#add, #subtract, #multiply, #divide, #exponent").on("click", function () {
+    if (isSettingTaxRate || isMuMode) return
 
     const value = $(this).text()
 
+    // Map the button text to the correct operator
+    let operator
+    switch (value) {
+      case "+":
+        operator = "+"
+        break
+      case "-":
+        operator = "-"
+        break
+      case "×":
+        operator = "×"
+        break
+      case "÷":
+        operator = "÷"
+        break
+      case "^":
+        operator = "^"
+        break
+      default:
+        operator = value
+    }
+
     // If we just calculated a result, store the operation for repeat
     if (isCalculated) {
-      lastOperation = value
+      lastOperation = operator
       lastValue = Number.parseFloat(currentInput)
     }
 
-    // Allow consecutive operators (like divide divide)
-    insertAtCursor(value)
-
-    // If equals was pressed twice, perform the operation again
-    if ($(this).is("#equals") && isCalculated) {
-      repeatLastOperation()
-    }
+    insertAtCursor(operator)
   })
 
   $("#equals").on("click", () => {
@@ -560,14 +684,20 @@ $(document).ready(() => {
       return
     }
 
-    if (isFractionMode) {
-      if (fractionDenominator !== null) {
-        fractionDenominator = (Number.parseFloat(fractionDenominator) * -1).toString()
-      } else if (fractionNumerator !== null) {
-        fractionNumerator = (Number.parseFloat(fractionNumerator) * -1).toString()
+    if (isMuMode) {
+      // Toggle negative markup rate if needed
+      if (currentInput.startsWith("-")) {
+        currentInput = currentInput.substring(1)
+      } else {
+        currentInput = "-" + currentInput
       }
+      cursorIndex = currentInput.length
       updateDisplay()
       return
+    }
+
+    if (isViewingHistory) {
+      isViewingHistory = false
     }
 
     if (currentInput !== "0") {
@@ -583,7 +713,7 @@ $(document).ready(() => {
   })
 
   $("#percent").on("click", () => {
-    if (isSettingTaxRate || isFractionMode) return
+    if (isSettingTaxRate || isMuMode || isViewingHistory) return
 
     try {
       const value = Number.parseFloat(currentInput) / 100
@@ -597,9 +727,12 @@ $(document).ready(() => {
   })
 
   $("#square-root").on("click", () => {
-    if (isSettingTaxRate || isFractionMode) return
+    if (isSettingTaxRate || isMuMode || isViewingHistory) return
 
     try {
+      // Save the equation before calculating
+      const equation = `√(${currentInput})`
+
       const value = Math.sqrt(Number.parseFloat(currentInput))
       if (isNaN(value)) {
         currentInput = "Error"
@@ -608,6 +741,14 @@ $(document).ready(() => {
       }
       cursorIndex = currentInput.length
       isCalculated = true
+
+      // Add to history - store both equation and result
+      history.push({
+        equation: equation,
+        result: currentInput,
+      })
+      historyIndex = history.length
+
       updateDisplay()
     } catch (error) {
       currentInput = "Error"
@@ -615,30 +756,29 @@ $(document).ready(() => {
     }
   })
 
-  // Exponent function
-  $("#exponent").on("click", () => {
-    if (isSettingTaxRate || isFractionMode) return
-    insertAtCursor("^")
-  })
-
   // Fraction function
   $("#fraction").on("click", () => {
-    if (isSettingTaxRate) return
-
-    // If already in fraction mode, calculate the result
-    if (isFractionMode) {
-      calculateFraction()
-      return
-    }
+    if (isSettingTaxRate || isMuMode || isViewingHistory) return
 
     // If the display already shows a fraction with /, calculate it
     if (currentInput.includes("/")) {
       try {
         const parts = currentInput.split("/")
         if (parts.length === 2) {
+          // Save the equation before calculating
+          const equation = currentInput
+
           const decimal = Number.parseFloat(parts[0]) / Number.parseFloat(parts[1])
           currentInput = decimal.toString()
           cursorIndex = currentInput.length
+
+          // Add to history - store both equation and result
+          history.push({
+            equation: equation,
+            result: currentInput,
+          })
+          historyIndex = history.length
+
           updateDisplay()
         }
       } catch (error) {
@@ -649,13 +789,13 @@ $(document).ready(() => {
       return
     }
 
-    // Enter fraction mode
-    enterFractionMode()
+    // Insert a slash for fraction
+    insertAtCursor("/")
   })
 
   // Memory functions
   $("#rm-cm").on("click", () => {
-    if (isSettingTaxRate || isFractionMode) return
+    if (isSettingTaxRate || isMuMode || isViewingHistory) return
 
     // Double click or long press would clear memory, but for now just toggle
     if (memory !== 0) {
@@ -669,7 +809,11 @@ $(document).ready(() => {
   })
 
   $("#m-plus").on("click", () => {
-    if (isSettingTaxRate || isFractionMode) return
+    if (isSettingTaxRate || isMuMode) return
+
+    if (isViewingHistory) {
+      isViewingHistory = false
+    }
 
     try {
       memory += Number.parseFloat(currentInput)
@@ -681,7 +825,11 @@ $(document).ready(() => {
   })
 
   $("#m-minus").on("click", () => {
-    if (isSettingTaxRate || isFractionMode) return
+    if (isSettingTaxRate || isMuMode) return
+
+    if (isViewingHistory) {
+      isViewingHistory = false
+    }
 
     try {
       memory -= Number.parseFloat(currentInput)
@@ -694,14 +842,30 @@ $(document).ready(() => {
 
   // Tax functions
   $("#tax").on("click", () => {
-    if (isSettingTaxRate || isFractionMode) return
+    if (isSettingTaxRate || isMuMode) return
+
+    if (isViewingHistory) {
+      isViewingHistory = false
+    }
 
     try {
       const value = Number.parseFloat(currentInput)
       const taxAmount = value * (taxRate / 100)
+
+      // Save the equation before calculating
+      const equation = `${value} - ${taxRate}%`
+
       currentInput = (value - taxAmount).toString()
       cursorIndex = currentInput.length
       isCalculated = true
+
+      // Add to history - store both equation and result
+      history.push({
+        equation: equation,
+        result: currentInput,
+      })
+      historyIndex = history.length
+
       updateDisplay()
     } catch (error) {
       currentInput = "Error"
@@ -710,14 +874,30 @@ $(document).ready(() => {
   })
 
   $("#tax-plus").on("click", () => {
-    if (isSettingTaxRate || isFractionMode) return
+    if (isSettingTaxRate || isMuMode) return
+
+    if (isViewingHistory) {
+      isViewingHistory = false
+    }
 
     try {
       const value = Number.parseFloat(currentInput)
       const taxAmount = value * (taxRate / 100)
+
+      // Save the equation before calculating
+      const equation = `${value} + ${taxRate}%`
+
       currentInput = (value + taxAmount).toString()
       cursorIndex = currentInput.length
       isCalculated = true
+
+      // Add to history - store both equation and result
+      history.push({
+        equation: equation,
+        result: currentInput,
+      })
+      historyIndex = history.length
+
       updateDisplay()
     } catch (error) {
       currentInput = "Error"
@@ -727,13 +907,28 @@ $(document).ready(() => {
 
   // Grand Total function
   $("#gt").on("click", () => {
-    if (isSettingTaxRate || isFractionMode) return
+    if (isSettingTaxRate || isMuMode) return
+
+    if (isViewingHistory) {
+      isViewingHistory = false
+    }
 
     try {
+      // Save the equation before calculating
+      const equation = `GT + ${currentInput}`
+
       grandTotal += Number.parseFloat(currentInput)
       currentInput = grandTotal.toString()
       cursorIndex = currentInput.length
       isCalculated = true
+
+      // Add to history - store both equation and result
+      history.push({
+        equation: equation,
+        result: currentInput,
+      })
+      historyIndex = history.length
+
       updateDisplay()
     } catch (error) {
       currentInput = "Error"
@@ -743,48 +938,68 @@ $(document).ready(() => {
 
   // Markup function
   $("#mu").on("click", () => {
-    if (isSettingTaxRate || isFractionMode) return
+    if (isSettingTaxRate || isMuMode) return
 
-    try {
-      const cost = Number.parseFloat(currentInput)
-      // Assuming a standard 30% markup
-      const markup = cost * 0.3
-      currentInput = (cost + markup).toString()
-      cursorIndex = currentInput.length
-      isCalculated = true
-      updateDisplay()
-    } catch (error) {
-      currentInput = "Error"
-      updateDisplay()
+    if (isViewingHistory) {
+      isViewingHistory = false
     }
+
+    enterMuMode()
   })
 
-  // Round Value function
+  // Replace the RV button function with this one
   $("#rv").on("click", () => {
-    if (isSettingTaxRate || isFractionMode) return
+    if (isSettingTaxRate || isMuMode) return
 
-    try {
-      const value = Number.parseFloat(currentInput)
-      currentInput = Math.round(value).toString()
+    // If there's no history, nothing to review
+    if (history.length === 0) return
+
+    // Get the most recent calculation
+    const lastCalc = history[history.length - 1]
+
+    // If there are intermediate results, show the previous operation's result
+    if (lastCalc.intermediateResults && lastCalc.intermediateResults.length > 1) {
+      // Show the second-to-last intermediate result (the previous operation)
+      const prevResult = lastCalc.intermediateResults[lastCalc.intermediateResults.length - 2]
+      currentInput = prevResult.toString()
       cursorIndex = currentInput.length
-      isCalculated = true
+
+      // Enter history review mode
+      isViewingHistory = true
+      historyIndex = history.length - 1
+
+      // Update display with a visual indicator that we're in review mode
       updateDisplay()
-    } catch (error) {
-      currentInput = "Error"
-      updateDisplay()
+
+      // Flash the display briefly to indicate review mode
+      $display.addClass("reviewing")
+      setTimeout(() => {
+        $display.removeClass("reviewing")
+      }, 300)
     }
   })
+
+  // Add this to the CSS file via jQuery to avoid modifying the CSS file directly
+  $("<style>")
+    .prop("type", "text/css")
+    .html(`
+      .reviewing {
+        background-color: #f0f8ff;
+        transition: background-color 0.3s;
+      }
+    `)
+    .appendTo("head")
 
   // Left and right parentheses
   $("#left-paren, #right-paren").on("click", function () {
-    if (!isSettingTaxRate && !isFractionMode) {
+    if (!isSettingTaxRate && !isMuMode) {
       insertAtCursor($(this).text())
     }
   })
 
   // Arrow key navigation
   $("#left-arrow").on("click", () => {
-    if (isSettingTaxRate || isFractionMode) return
+    if (isSettingTaxRate || isMuMode) return
 
     if (cursorIndex > 0) {
       cursorIndex--
@@ -793,7 +1008,7 @@ $(document).ready(() => {
   })
 
   $("#right-arrow").on("click", () => {
-    if (isSettingTaxRate || isFractionMode) return
+    if (isSettingTaxRate || isMuMode) return
 
     if (cursorIndex < currentInput.length) {
       cursorIndex++
@@ -801,37 +1016,73 @@ $(document).ready(() => {
     }
   })
 
+  // Update the up/down arrow navigation to work with intermediate results
   $("#up-arrow").on("click", () => {
-    if (isSettingTaxRate || isFractionMode) return
+    if (isSettingTaxRate || isMuMode) return
     if (history.length === 0) return
 
-    if (historyIndex > 0) {
-      historyIndex--
-    } else {
-      historyIndex = 0
+    // If not already in history view mode, enter it
+    if (!isViewingHistory) {
+      isViewingHistory = true
+      historyIndex = history.length - 1
+
+      // Start by showing the final result
+      currentInput = history[historyIndex].result
+      cursorIndex = currentInput.length
+      updateDisplay()
+      return
     }
 
-    currentInput = history[historyIndex]
-    cursorIndex = currentInput.length
-    isViewingHistory = true
-    updateDisplay()
+    // If we're viewing history, cycle through intermediate results in reverse
+    const currentCalc = history[historyIndex]
+    if (currentCalc.intermediateResults) {
+      // Find the current position in the intermediate results
+      let currentPos = -1
+      for (let i = 0; i < currentCalc.intermediateResults.length; i++) {
+        if (currentInput === currentCalc.intermediateResults[i].toString()) {
+          currentPos = i
+          break
+        }
+      }
+
+      // Move to the previous intermediate result
+      if (currentPos > 0) {
+        currentInput = currentCalc.intermediateResults[currentPos - 1].toString()
+        cursorIndex = currentInput.length
+        updateDisplay()
+      }
+    }
   })
 
   $("#down-arrow").on("click", () => {
-    if (isSettingTaxRate || isFractionMode) return
-    if (history.length === 0) return
+    if (isSettingTaxRate || isMuMode) return
+    if (!isViewingHistory || history.length === 0) return
 
-    if (historyIndex < history.length - 1) {
-      historyIndex++
-      currentInput = history[historyIndex]
-    } else {
-      // If at the end of history, return to current input
-      currentInput = "0"
-      isViewingHistory = false
+    // If we're viewing history, cycle through intermediate results
+    const currentCalc = history[historyIndex]
+    if (currentCalc.intermediateResults) {
+      // Find the current position in the intermediate results
+      let currentPos = -1
+      for (let i = 0; i < currentCalc.intermediateResults.length; i++) {
+        if (currentInput === currentCalc.intermediateResults[i].toString()) {
+          currentPos = i
+          break
+        }
+      }
+
+      // Move to the next intermediate result
+      if (currentPos >= 0 && currentPos < currentCalc.intermediateResults.length - 1) {
+        currentInput = currentCalc.intermediateResults[currentPos + 1].toString()
+        cursorIndex = currentInput.length
+        updateDisplay()
+      } else if (currentPos === currentCalc.intermediateResults.length - 1) {
+        // If at the end of intermediate results, return to normal mode
+        isViewingHistory = false
+        currentInput = "0"
+        cursorIndex = 1
+        updateDisplay()
+      }
     }
-
-    cursorIndex = currentInput.length
-    updateDisplay()
   })
 
   // Tax Rate Modification - Button Combination
