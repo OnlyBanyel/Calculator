@@ -3,6 +3,7 @@ $(document).ready(() => {
   const $display = $("#display")
   const $memoryIndicator = $("#memory-indicator")
   const $cursorPosition = $("#cursor-position")
+  const $fractionDisplay = $("#fraction-display")
 
   // Calculator state
   let currentInput = "0"
@@ -15,13 +16,99 @@ $(document).ready(() => {
   let historyIndex = -1
   let isViewingHistory = false
   let isSettingTaxRate = false
+  let lastOperation = null
+  let lastValue = null
+  let isFractionMode = false
+  let fractionNumerator = null
+  let fractionDenominator = null
+  let displayScrollPosition = 0
 
   // Initialize display
   updateDisplay()
 
   // Helper functions
   function updateDisplay() {
-    $display.val(currentInput)
+    // Format with commas for thousands
+    let displayValue = currentInput
+
+    // Don't format if in special modes or if it's an error
+    if (!isSettingTaxRate && !isFractionMode && displayValue !== "Error") {
+      // Check if the input contains operators
+      const hasOperators = /[+\-×÷^/()]/.test(displayValue)
+
+      if (!hasOperators) {
+        // Format the whole number with commas
+        displayValue = formatNumberWithCommas(displayValue)
+      } else {
+        // Split by operators and format each number
+        const operators = ["+", "-", "×", "÷", "^", "/", "(", ")"]
+        let formattedParts = ""
+        let currentNumber = ""
+
+        for (let i = 0; i < displayValue.length; i++) {
+          const char = displayValue[i]
+          if (operators.includes(char)) {
+            if (currentNumber) {
+              formattedParts += formatNumberWithCommas(currentNumber)
+              currentNumber = ""
+            }
+            formattedParts += char
+          } else {
+            currentNumber += char
+          }
+        }
+
+        if (currentNumber) {
+          formattedParts += formatNumberWithCommas(currentNumber)
+        }
+
+        displayValue = formattedParts
+      }
+    }
+
+    // Hide fraction display by default
+    $fractionDisplay.hide()
+
+    // Special display for fraction mode
+    if (isFractionMode) {
+      $display.val("")
+      $fractionDisplay.show()
+
+      // Update the fraction display
+      if (fractionNumerator === null) {
+        $("#fraction-numerator").text("n")
+      } else {
+        $("#fraction-numerator").text(fractionNumerator)
+      }
+
+      if (fractionDenominator === null) {
+        $("#fraction-denominator").text("d")
+      } else {
+        $("#fraction-denominator").text(fractionDenominator)
+      }
+    } else {
+      $display.val(displayValue)
+    }
+
+    // Handle display scrolling for long inputs
+    if (displayValue.length > 12) {
+      // Calculate how much to scroll
+      const visibleChars = 12
+      const totalChars = displayValue.length
+
+      // Ensure cursor is visible
+      if (cursorIndex < displayScrollPosition) {
+        displayScrollPosition = Math.max(0, cursorIndex - 2)
+      } else if (cursorIndex > displayScrollPosition + visibleChars - 1) {
+        displayScrollPosition = Math.min(totalChars - visibleChars, cursorIndex - visibleChars + 3)
+      }
+
+      // Apply scrolling by showing only a portion of the text
+      const visibleText = displayValue.substring(displayScrollPosition, displayScrollPosition + visibleChars)
+      $display.val(visibleText)
+    } else {
+      displayScrollPosition = 0
+    }
 
     // Position cursor indicator
     if (cursorIndex > currentInput.length) {
@@ -30,17 +117,44 @@ $(document).ready(() => {
 
     // Calculate cursor position based on character position
     const displayWidth = $display.width()
-    const textWidth = currentInput.length * 15 // Approximate character width
+    const charWidth = 15 // Approximate character width
     const rightPadding = 10
 
-    // Calculate position based on right-aligned text
-    const totalWidth = displayWidth - rightPadding
-    const charsFromRight = currentInput.length - cursorIndex
+    // Calculate position based on right-aligned text and scroll position
+    const visibleCursorIndex = cursorIndex - displayScrollPosition
+    const charsFromRight = Math.min(12, currentInput.length - displayScrollPosition) - visibleCursorIndex
 
     $cursorPosition.css({
-      right: rightPadding + charsFromRight * 15 + "px",
-      display: "block",
+      right: rightPadding + charsFromRight * charWidth + "px",
+      display: isFractionMode ? "none" : "block",
     })
+  }
+
+  function formatNumberWithCommas(numStr) {
+    // Don't format if it's not a valid number
+    if (numStr === "" || isNaN(Number.parseFloat(numStr))) {
+      return numStr
+    }
+
+    // Handle negative numbers
+    const isNegative = numStr.startsWith("-")
+    if (isNegative) {
+      numStr = numStr.substring(1)
+    }
+
+    // Split by decimal point
+    const parts = numStr.split(".")
+
+    // Format the integer part with commas
+    parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ",")
+
+    // Reconstruct the number
+    let result = parts.join(".")
+    if (isNegative) {
+      result = "-" + result
+    }
+
+    return result
   }
 
   function insertAtCursor(text) {
@@ -53,6 +167,21 @@ $(document).ready(() => {
           currentInput += text
         }
         cursorIndex = currentInput.length
+        updateDisplay()
+      }
+      return
+    }
+
+    if (isFractionMode) {
+      // In fraction mode, only allow numbers
+      if (!isNaN(text)) {
+        if (fractionNumerator === null) {
+          fractionNumerator = text
+        } else if (fractionDenominator === null) {
+          fractionDenominator = text
+        } else {
+          fractionDenominator += text
+        }
         updateDisplay()
       }
       return
@@ -80,12 +209,20 @@ $(document).ready(() => {
       return
     }
 
+    if (isFractionMode) {
+      exitFractionMode()
+      return
+    }
+
     currentInput = "0"
     cursorIndex = 1
     isCalculated = false
+    lastOperation = null
+    lastValue = null
     history.length = 0
     historyIndex = -1
     isViewingHistory = false
+    displayScrollPosition = 0
     updateDisplay()
   }
 
@@ -97,11 +234,19 @@ $(document).ready(() => {
       return
     }
 
+    if (isFractionMode) {
+      fractionNumerator = null
+      fractionDenominator = null
+      updateDisplay()
+      return
+    }
+
     if (isCalculated) {
       clearAll()
     } else {
       currentInput = "0"
       cursorIndex = 1
+      displayScrollPosition = 0
       updateDisplay()
     }
   }
@@ -114,6 +259,18 @@ $(document).ready(() => {
         cursorIndex = currentInput.length
         updateDisplay()
       }
+      return
+    }
+
+    if (isFractionMode) {
+      if (fractionDenominator !== null && fractionDenominator.length > 0) {
+        fractionDenominator = fractionDenominator.slice(0, -1)
+        if (fractionDenominator === "") fractionDenominator = null
+      } else if (fractionNumerator !== null && fractionNumerator.length > 0) {
+        fractionNumerator = fractionNumerator.slice(0, -1)
+        if (fractionNumerator === "") fractionNumerator = null
+      }
+      updateDisplay()
       return
     }
 
@@ -131,6 +288,11 @@ $(document).ready(() => {
   function calculate() {
     if (isSettingTaxRate) {
       saveTaxRate()
+      return
+    }
+
+    if (isFractionMode) {
+      calculateFraction()
       return
     }
 
@@ -153,16 +315,65 @@ $(document).ready(() => {
 
       cursorIndex = currentInput.length
       isCalculated = true
+      displayScrollPosition = 0
 
       // Add to history
       history.push(currentInput)
       historyIndex = history.length
 
       updateDisplay()
+
+      // Save for repeat operations
+      lastValue = Number.parseFloat(currentInput)
     } catch (error) {
       currentInput = "Error"
       cursorIndex = currentInput.length
       updateDisplay()
+    }
+  }
+
+  function repeatLastOperation() {
+    if (lastOperation && lastValue !== null) {
+      try {
+        const currentValue = Number.parseFloat(currentInput)
+        let result
+
+        switch (lastOperation) {
+          case "+":
+            result = currentValue + lastValue
+            break
+          case "-":
+            result = currentValue - lastValue
+            break
+          case "×":
+            result = currentValue * lastValue
+            break
+          case "÷":
+            result = currentValue / lastValue
+            break
+          case "^":
+            result = Math.pow(currentValue, lastValue)
+            break
+        }
+
+        if (isNaN(result) || !isFinite(result)) {
+          currentInput = "Error"
+        } else {
+          currentInput = result.toString()
+          if (currentInput.includes(".")) {
+            currentInput = currentInput.replace(/\.?0+$/, "")
+          }
+        }
+
+        cursorIndex = currentInput.length
+        isCalculated = true
+        displayScrollPosition = 0
+        updateDisplay()
+      } catch (error) {
+        currentInput = "Error"
+        cursorIndex = currentInput.length
+        updateDisplay()
+      }
     }
   }
 
@@ -212,6 +423,56 @@ $(document).ready(() => {
     }
   }
 
+  // Fraction mode functions
+  function enterFractionMode() {
+    isFractionMode = true
+    fractionNumerator = null
+    fractionDenominator = null
+    updateDisplay()
+  }
+
+  function exitFractionMode() {
+    isFractionMode = false
+    fractionNumerator = null
+    fractionDenominator = null
+    currentInput = "0"
+    cursorIndex = 1
+    updateDisplay()
+  }
+
+  function calculateFraction() {
+    if (fractionNumerator !== null && fractionDenominator !== null) {
+      try {
+        const num = Number.parseFloat(fractionNumerator)
+        const denom = Number.parseFloat(fractionDenominator)
+
+        if (denom === 0) {
+          currentInput = "Error"
+        } else {
+          const result = num / denom
+          currentInput = result.toString()
+          if (currentInput.includes(".")) {
+            currentInput = currentInput.replace(/\.?0+$/, "")
+          }
+        }
+
+        isFractionMode = false
+        fractionNumerator = null
+        fractionDenominator = null
+        cursorIndex = currentInput.length
+        isCalculated = true
+        updateDisplay()
+      } catch (error) {
+        currentInput = "Error"
+        isFractionMode = false
+        fractionNumerator = null
+        fractionDenominator = null
+        cursorIndex = currentInput.length
+        updateDisplay()
+      }
+    }
+  }
+
   // Button click handlers
   // Fix: Only select number buttons that are not double-zero
   $(".number:not(#double-zero)").on("click", function () {
@@ -233,6 +494,10 @@ $(document).ready(() => {
       return
     }
 
+    if (isFractionMode) {
+      return // No decimals in fraction mode
+    }
+
     // Check if there's already a decimal in the current number segment
     const parts = currentInput.split(/[+\-×÷]/)
     const currentPart = parts[parts.length - 1]
@@ -243,14 +508,31 @@ $(document).ready(() => {
   })
 
   $("#add, #subtract, #multiply, #divide").on("click", function () {
-    if (!isSettingTaxRate) {
-      const value = $(this).text()
-      insertAtCursor(value)
+    if (isSettingTaxRate || isFractionMode) return
+
+    const value = $(this).text()
+
+    // If we just calculated a result, store the operation for repeat
+    if (isCalculated) {
+      lastOperation = value
+      lastValue = Number.parseFloat(currentInput)
+    }
+
+    // Allow consecutive operators (like divide divide)
+    insertAtCursor(value)
+
+    // If equals was pressed twice, perform the operation again
+    if ($(this).is("#equals") && isCalculated) {
+      repeatLastOperation()
     }
   })
 
   $("#equals").on("click", () => {
-    calculate()
+    if (isCalculated) {
+      repeatLastOperation()
+    } else {
+      calculate()
+    }
   })
 
   $("#on-c").on("click", () => {
@@ -278,6 +560,16 @@ $(document).ready(() => {
       return
     }
 
+    if (isFractionMode) {
+      if (fractionDenominator !== null) {
+        fractionDenominator = (Number.parseFloat(fractionDenominator) * -1).toString()
+      } else if (fractionNumerator !== null) {
+        fractionNumerator = (Number.parseFloat(fractionNumerator) * -1).toString()
+      }
+      updateDisplay()
+      return
+    }
+
     if (currentInput !== "0") {
       if (currentInput.startsWith("-")) {
         currentInput = currentInput.substring(1)
@@ -291,50 +583,55 @@ $(document).ready(() => {
   })
 
   $("#percent").on("click", () => {
-    if (!isSettingTaxRate) {
-      try {
-        const value = Number.parseFloat(currentInput) / 100
-        currentInput = value.toString()
-        cursorIndex = currentInput.length
-        updateDisplay()
-      } catch (error) {
-        currentInput = "Error"
-        updateDisplay()
-      }
+    if (isSettingTaxRate || isFractionMode) return
+
+    try {
+      const value = Number.parseFloat(currentInput) / 100
+      currentInput = value.toString()
+      cursorIndex = currentInput.length
+      updateDisplay()
+    } catch (error) {
+      currentInput = "Error"
+      updateDisplay()
     }
   })
 
   $("#square-root").on("click", () => {
-    if (!isSettingTaxRate) {
-      try {
-        const value = Math.sqrt(Number.parseFloat(currentInput))
-        if (isNaN(value)) {
-          currentInput = "Error"
-        } else {
-          currentInput = value.toString()
-        }
-        cursorIndex = currentInput.length
-        isCalculated = true
-        updateDisplay()
-      } catch (error) {
+    if (isSettingTaxRate || isFractionMode) return
+
+    try {
+      const value = Math.sqrt(Number.parseFloat(currentInput))
+      if (isNaN(value)) {
         currentInput = "Error"
-        updateDisplay()
+      } else {
+        currentInput = value.toString()
       }
+      cursorIndex = currentInput.length
+      isCalculated = true
+      updateDisplay()
+    } catch (error) {
+      currentInput = "Error"
+      updateDisplay()
     }
   })
 
   // Exponent function
   $("#exponent").on("click", () => {
-    if (!isSettingTaxRate) {
-      insertAtCursor("^")
-    }
+    if (isSettingTaxRate || isFractionMode) return
+    insertAtCursor("^")
   })
 
   // Fraction function
   $("#fraction").on("click", () => {
     if (isSettingTaxRate) return
 
-    // If the display already shows a fraction, calculate it
+    // If already in fraction mode, calculate the result
+    if (isFractionMode) {
+      calculateFraction()
+      return
+    }
+
+    // If the display already shows a fraction with /, calculate it
     if (currentInput.includes("/")) {
       try {
         const parts = currentInput.split("/")
@@ -352,63 +649,13 @@ $(document).ready(() => {
       return
     }
 
-    // If we're in the middle of entering a number, add a fraction separator
-    if (currentInput !== "0" && !isCalculated) {
-      insertAtCursor("/")
-      return
-    }
-
-    // If we have a calculated result, convert to fraction
-    if (isCalculated) {
-      try {
-        const value = Number.parseFloat(currentInput)
-
-        // Convert decimal to fraction
-        const decimalToFraction = (decimal) => {
-          if (decimal === Number.parseInt(decimal)) {
-            return { numerator: decimal, denominator: 1 }
-          }
-
-          // Convert to string and count decimal places
-          const decimalStr = decimal.toString()
-          const decimalPlaces = decimalStr.includes(".") ? decimalStr.split(".")[1].length : 0
-
-          // Convert to fraction with denominator based on decimal places
-          let denominator = Math.pow(10, decimalPlaces)
-          let numerator = decimal * denominator
-
-          // Find greatest common divisor
-          const findGCD = (a, b) => {
-            return b ? findGCD(b, a % b) : a
-          }
-
-          const gcd = findGCD(numerator, denominator)
-
-          // Simplify the fraction
-          numerator = numerator / gcd
-          denominator = denominator / gcd
-
-          return {
-            numerator: Math.round(numerator),
-            denominator: Math.round(denominator),
-          }
-        }
-
-        const fraction = decimalToFraction(value)
-        currentInput = `${fraction.numerator}/${fraction.denominator}`
-        cursorIndex = currentInput.length
-        updateDisplay()
-      } catch (error) {
-        currentInput = "Error"
-        cursorIndex = currentInput.length
-        updateDisplay()
-      }
-    }
+    // Enter fraction mode
+    enterFractionMode()
   })
 
   // Memory functions
   $("#rm-cm").on("click", () => {
-    if (isSettingTaxRate) return
+    if (isSettingTaxRate || isFractionMode) return
 
     // Double click or long press would clear memory, but for now just toggle
     if (memory !== 0) {
@@ -422,7 +669,7 @@ $(document).ready(() => {
   })
 
   $("#m-plus").on("click", () => {
-    if (isSettingTaxRate) return
+    if (isSettingTaxRate || isFractionMode) return
 
     try {
       memory += Number.parseFloat(currentInput)
@@ -434,7 +681,7 @@ $(document).ready(() => {
   })
 
   $("#m-minus").on("click", () => {
-    if (isSettingTaxRate) return
+    if (isSettingTaxRate || isFractionMode) return
 
     try {
       memory -= Number.parseFloat(currentInput)
@@ -447,7 +694,7 @@ $(document).ready(() => {
 
   // Tax functions
   $("#tax").on("click", () => {
-    if (isSettingTaxRate) return
+    if (isSettingTaxRate || isFractionMode) return
 
     try {
       const value = Number.parseFloat(currentInput)
@@ -463,7 +710,7 @@ $(document).ready(() => {
   })
 
   $("#tax-plus").on("click", () => {
-    if (isSettingTaxRate) return
+    if (isSettingTaxRate || isFractionMode) return
 
     try {
       const value = Number.parseFloat(currentInput)
@@ -480,7 +727,7 @@ $(document).ready(() => {
 
   // Grand Total function
   $("#gt").on("click", () => {
-    if (isSettingTaxRate) return
+    if (isSettingTaxRate || isFractionMode) return
 
     try {
       grandTotal += Number.parseFloat(currentInput)
@@ -496,7 +743,7 @@ $(document).ready(() => {
 
   // Markup function
   $("#mu").on("click", () => {
-    if (isSettingTaxRate) return
+    if (isSettingTaxRate || isFractionMode) return
 
     try {
       const cost = Number.parseFloat(currentInput)
@@ -514,7 +761,7 @@ $(document).ready(() => {
 
   // Round Value function
   $("#rv").on("click", () => {
-    if (isSettingTaxRate) return
+    if (isSettingTaxRate || isFractionMode) return
 
     try {
       const value = Number.parseFloat(currentInput)
@@ -530,14 +777,14 @@ $(document).ready(() => {
 
   // Left and right parentheses
   $("#left-paren, #right-paren").on("click", function () {
-    if (!isSettingTaxRate) {
+    if (!isSettingTaxRate && !isFractionMode) {
       insertAtCursor($(this).text())
     }
   })
 
   // Arrow key navigation
   $("#left-arrow").on("click", () => {
-    if (isSettingTaxRate) return
+    if (isSettingTaxRate || isFractionMode) return
 
     if (cursorIndex > 0) {
       cursorIndex--
@@ -546,7 +793,7 @@ $(document).ready(() => {
   })
 
   $("#right-arrow").on("click", () => {
-    if (isSettingTaxRate) return
+    if (isSettingTaxRate || isFractionMode) return
 
     if (cursorIndex < currentInput.length) {
       cursorIndex++
@@ -555,7 +802,7 @@ $(document).ready(() => {
   })
 
   $("#up-arrow").on("click", () => {
-    if (isSettingTaxRate) return
+    if (isSettingTaxRate || isFractionMode) return
     if (history.length === 0) return
 
     if (historyIndex > 0) {
@@ -571,7 +818,7 @@ $(document).ready(() => {
   })
 
   $("#down-arrow").on("click", () => {
-    if (isSettingTaxRate) return
+    if (isSettingTaxRate || isFractionMode) return
     if (history.length === 0) return
 
     if (historyIndex < history.length - 1) {
