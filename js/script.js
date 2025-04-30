@@ -23,110 +23,108 @@ $(document).ready(() => {
   let muBaseValue = null
   let currentEquation = "" // Track the current equation being built
 
+  // Add these variable initializations near the top of the $(document).ready() function, after the other state variables
+  let isFractionMode = false
+  let activeFractionPart = "numerator"
+  let fractionData = { numerator: "", denominator: "" }
+
   // Initialize display and indicators
   $muIndicator.css("opacity", "0") // Explicitly hide MU indicator on initialization
   $memoryIndicator.css("opacity", "0") // Hide memory indicator initially
   updateDisplay()
 
   // Helper functions
+  // Modify the updateDisplay function to handle fractions properly
+  // Find the updateDisplay function and replace it with this version
   function updateDisplay() {
-    // Format with commas for thousands
     let displayValue = currentInput
+    let formattedDisplay = currentInput
 
-    // Don't format if in special modes or if it's an error
-    if (!isSettingTaxRate && displayValue !== "Error") {
-      // Check if the input contains operators
-      const hasOperators = /[+\-×÷^/()]/.test(displayValue)
+    if (isFractionMode) {
+      renderFraction()
+      return
+    }
 
-      if (!hasOperators) {
-        // Format the whole number with commas
-        displayValue = formatNumberWithCommas(displayValue)
-      } else {
-        // Split by operators and format each number
-        const operators = ["+", "-", "×", "÷", "^", "/", "(", ")"]
-        let formattedParts = ""
-        let currentNumber = ""
+    // Format the display value
+    if (!isSettingTaxRate && !isMuMode && !isViewingHistory) {
+      // Only format numbers, not error messages or special states
+      if (!isNaN(Number.parseFloat(displayValue)) && displayValue !== "Error") {
+        // Split by operators to format each number part
+        const parts = displayValue.split(/[(+\-×÷^/()]/)
+        formattedDisplay = ""
 
-        for (let i = 0; i < displayValue.length; i++) {
-          const char = displayValue[i]
-          if (operators.includes(char)) {
-            if (currentNumber) {
-              formattedParts += formatNumberWithCommas(currentNumber)
-              currentNumber = ""
+        for (let i = 0; i < parts.length; i++) {
+          if (i % 2 === 0) {
+            // Number part
+            if (!isNaN(Number.parseFloat(parts[i]))) {
+              formattedDisplay += formatNumberWithCommas(parts[i])
+            } else {
+              formattedDisplay += parts[i]
             }
-            formattedParts += char
           } else {
-            currentNumber += char
+            // Operator part
+            formattedDisplay += parts[i]
           }
         }
+      }
 
-        if (currentNumber) {
-          formattedParts += formatNumberWithCommas(currentNumber)
-        }
+      displayValue = formattedDisplay
+    }
 
-        displayValue = formattedParts
+    // Update the display with the formatted value
+    $("#display").html(displayValue)
+
+    // Add the cursor at the correct position
+    if (!isSettingTaxRate && !isMuMode && !isViewingHistory) {
+      // Create a temporary container to measure text width
+      const tempContainer = $("<div>")
+        .css({
+          position: "absolute",
+          visibility: "hidden",
+          height: "auto",
+          width: "auto",
+          whiteSpace: "nowrap",
+          font: $("#display").css("font"),
+          fontSize: $("#display").css("font-size"),
+        })
+        .appendTo("body")
+
+      // Get text before cursor
+      const textBeforeCursor = displayValue.substring(0, cursorIndex)
+      tempContainer.text(textBeforeCursor)
+
+      // Calculate cursor position
+      const displayWidth = $("#display").width()
+      const textWidth = tempContainer.width()
+      const cursorPosition = Math.min(textWidth, displayWidth - 2)
+
+      // Remove the temporary container
+      tempContainer.remove()
+
+      // Insert cursor at the calculated position
+      const displayText = $("#display").html()
+      const cursorHtml = `<span class="cursor-indicator" style="position: relative; display: inline-block; width: 0;">
+                          <span style="position: absolute; bottom: 0; left: 0; width: 1px; height: 18px; background-color: black; animation: blink 1s infinite;"></span>
+                        </span>`
+
+      if (cursorIndex === 0) {
+        $("#display").html(cursorHtml + displayText)
+      } else if (cursorIndex >= displayText.length) {
+        $("#display").html(displayText + cursorHtml)
+      } else {
+        $("#display").html(displayText.substring(0, cursorIndex) + cursorHtml + displayText.substring(cursorIndex))
       }
     }
 
-    // Handle display scrolling for long inputs
-    if (displayValue.length > 12) {
-      // Calculate how much to scroll
-      const visibleChars = 12
-      const totalChars = displayValue.length
-
-      // Ensure cursor is visible
-      if (cursorIndex < displayScrollPosition) {
-        displayScrollPosition = Math.max(0, cursorIndex - 2)
-      } else if (cursorIndex > displayScrollPosition + visibleChars - 1) {
-        displayScrollPosition = Math.min(totalChars - visibleChars, cursorIndex - visibleChars + 3)
-      }
-
-      // Apply scrolling by showing only a portion of the text
-      const visibleText = displayValue.substring(displayScrollPosition, displayScrollPosition + visibleChars)
-      $display.val(visibleText)
-    } else {
-      displayScrollPosition = 0
-      $display.val(displayValue)
-    }
-
-    // Update MU indicator - ensure it's only visible when in MU mode
-    if (isMuMode) {
-      $muIndicator.css("opacity", "1")
-    } else {
-      $muIndicator.css("opacity", "0")
-    }
-
-    // Update memory indicator
-    if (memory !== 0) {
-      $memoryIndicator.css("opacity", "1")
-    } else {
-      $memoryIndicator.css("opacity", "0")
-    }
-
-    // Position cursor indicator
-    if (cursorIndex > currentInput.length) {
-      cursorIndex = currentInput.length
-    }
-
-    // Calculate cursor position based on character position
-    const displayWidth = $display.width()
-    const charWidth = 15 // Approximate character width
-    const rightPadding = 10
-
-    // Calculate position based on right-aligned text and scroll position
-    const visibleCursorIndex = cursorIndex - displayScrollPosition
-    const charsFromRight = Math.min(12, currentInput.length - displayScrollPosition) - visibleCursorIndex
-
-    $cursorPosition.css({
-      right: rightPadding + charsFromRight * charWidth + "px",
-      display: "block",
-    })
+    // Update indicators
+    $memoryIndicator.css("opacity", memory !== 0 ? "1" : "0")
+    $muIndicator.css("opacity", isMuMode ? "1" : "0")
   }
 
   // Helper function to format numbers with commas
   function formatNumberWithCommas(numStr) {
     // Don't format if it's not a valid number
-    if (numStr === "" || isNaN(Number.parseFloat(numStr))) {
+    if (numStr === "") {
       return numStr
     }
 
@@ -231,17 +229,24 @@ $(document).ready(() => {
       return
     }
 
-    currentInput = "0"
-    currentEquation = ""
-    cursorIndex = 1
-    isCalculated = false
-    lastOperation = null
-    lastValue = null
-    history.length = 0
-    historyIndex = -1
-    isViewingHistory = false
-    displayScrollPosition = 0
-    updateDisplay()
+    if (isFractionMode) {
+      isFractionMode = false
+      currentInput = "0"
+      cursorIndex = 1
+      updateDisplay()
+    } else {
+      currentInput = "0"
+      currentEquation = ""
+      cursorIndex = 1
+      isCalculated = false
+      lastOperation = null
+      lastValue = null
+      history.length = 0
+      historyIndex = -1
+      isViewingHistory = false
+      displayScrollPosition = 0
+      updateDisplay()
+    }
   }
 
   function clearEntry() {
@@ -263,7 +268,10 @@ $(document).ready(() => {
       isViewingHistory = false
     }
 
-    if (isCalculated) {
+    if (isFractionMode) {
+      fractionData[activeFractionPart] = ""
+      renderFraction()
+    } else if (isCalculated) {
       clearAll()
     } else {
       currentInput = "0"
@@ -307,6 +315,14 @@ $(document).ready(() => {
       currentEquation = ""
       cursorIndex = 1
       updateDisplay()
+      return
+    }
+
+    if (isFractionMode) {
+      if (fractionData[activeFractionPart].length > 0) {
+        fractionData[activeFractionPart] = fractionData[activeFractionPart].slice(0, -1)
+        renderFraction()
+      }
       return
     }
 
@@ -546,42 +562,11 @@ $(document).ready(() => {
     updateDisplay()
   }
 
-  function saveTaxRate() {
-    try {
-      // Extract the number part from "TAX RATE: X.XX"
-      const newRate = Number.parseFloat(currentInput.substring(10))
-      if (!isNaN(newRate) && newRate >= 0) {
-        taxRate = newRate
-        // Show confirmation
-        currentInput = "RATE SET: " + taxRate + "%"
-        updateDisplay()
-
-        // Return to normal mode after showing confirmation
-        setTimeout(() => {
-          exitTaxRateMode()
-        }, 1500)
-      } else {
-        // Invalid input
-        currentInput = "INVALID RATE"
-        updateDisplay()
-        setTimeout(() => {
-          enterTaxRateMode()
-        }, 1000)
-      }
-    } catch (error) {
-      currentInput = "ERROR"
-      updateDisplay()
-      setTimeout(() => {
-        exitTaxRateMode()
-      }, 1000)
-    }
-  }
-
   // Button click handlers
   // Fix: Only select number buttons that are not double-zero
   $(".number:not(#double-zero)").on("click", function () {
     const value = $(this).text()
-    insertAtCursor(value)
+    handleDigitInput(value)
   })
 
   // Separate handler for double-zero
@@ -652,7 +637,9 @@ $(document).ready(() => {
   })
 
   $("#equals").on("click", () => {
-    if (isCalculated) {
+    if (isFractionMode) {
+      calculateFraction()
+    } else if (isCalculated) {
       repeatLastOperation()
     } else {
       calculate()
@@ -660,11 +647,23 @@ $(document).ready(() => {
   })
 
   $("#on-c").on("click", () => {
-    clearAll()
+    if (isFractionMode) {
+      isFractionMode = false
+      currentInput = "0"
+      cursorIndex = 1
+      updateDisplay()
+    } else {
+      clearAll()
+    }
   })
 
   $("#ce").on("click", () => {
-    clearEntry()
+    if (isFractionMode) {
+      fractionData[activeFractionPart] = ""
+      renderFraction()
+    } else {
+      clearEntry()
+    }
   })
 
   $("#del").on("click", () => {
@@ -756,41 +755,248 @@ $(document).ready(() => {
     }
   })
 
-  // Fraction function
-  $("#fraction").on("click", () => {
-    if (isSettingTaxRate || isMuMode || isViewingHistory) return
+  // Replace the existing renderFraction function with this improved version
+  function renderFraction() {
+    // Add custom styles for fraction mode
+    if (!$("#fraction-styles").length) {
+      $("<style>")
+        .attr("id", "fraction-styles")
+        .prop("type", "text/css")
+        .html(`
+      .fraction-container {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        justify-content: center;
+        height: 100%;
+        position: absolute;
+        right: 10px;
+        top: 50%;
+        transform: translateY(-50%);
+      }
+      .numerator, .denominator {
+        padding: 2px 5px;
+        min-width: 30px;
+        text-align: right;
+        border-radius: 3px;
+        font-size: 16px;
+        position: relative;
+      }
+      .fraction-bar {
+        height: 1px;
+        background-color: black;
+        width: 80%;
+        max-width: 40px;
+        margin: 3px 0;
+        align-self: flex-end;
+      }
+      @keyframes blink {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0; }
+      }
+    `)
+        .appendTo("head")
+    }
 
-    // If the display already shows a fraction with /, calculate it
-    if (currentInput.includes("/")) {
+    // Create the fraction display with improved styling and cursor
+    const numeratorContent = fractionData.numerator || "&nbsp;"
+    const denominatorContent = fractionData.denominator || "&nbsp;"
+
+    // Add cursor to the active part
+    const numeratorWithCursor =
+      activeFractionPart === "numerator"
+        ? numeratorContent +
+          '<span class="cursor-indicator" style="display: inline-block; width: 0;"><span style="position: absolute; bottom: 0; width: 1px; height: 14px; background-color: black; animation: blink 1s infinite;"></span></span>'
+        : numeratorContent
+
+    const denominatorWithCursor =
+      activeFractionPart === "denominator"
+        ? denominatorContent +
+          '<span class="cursor-indicator" style="display: inline-block; width: 0;"><span style="position: absolute; bottom: 0; width: 1px; height: 14px; background-color: black; animation: blink 1s infinite;"></span></span>'
+        : denominatorContent
+
+    $("#display").html(`
+    <div class="fraction-container">
+      <div class="numerator">
+        ${numeratorWithCursor}
+      </div>
+      <div class="fraction-bar"></div>
+      <div class="denominator">
+        ${denominatorWithCursor}
+      </div>
+    </div>
+  `)
+
+    // Adjust the width of the fraction bar based on the content
+    const numeratorWidth = $(".numerator").width()
+    const denominatorWidth = $(".denominator").width()
+    const maxWidth = Math.max(numeratorWidth, denominatorWidth)
+    $(".fraction-bar").css("width", Math.min(maxWidth, 40) + "px")
+  }
+
+  // Replace the existing handleDigitInput function with this improved version
+  function handleDigitInput(digit) {
+    if (isFractionMode) {
+      fractionData[activeFractionPart] += digit
+      renderFraction()
+    } else {
+      insertAtCursor(digit)
+    }
+  }
+
+  // Add this new function to handle fraction calculations
+  function calculateFraction() {
+    if (fractionData.numerator && fractionData.denominator) {
       try {
-        const parts = currentInput.split("/")
-        if (parts.length === 2) {
-          // Save the equation before calculating
-          const equation = currentInput
+        // Instead of directly parsing as integers, evaluate the expressions
+        const numeratorExpression = fractionData.numerator
+        const denominatorExpression = fractionData.denominator
 
-          const decimal = Number.parseFloat(parts[0]) / Number.parseFloat(parts[1])
-          currentInput = decimal.toString()
-          cursorIndex = currentInput.length
+        // Handle basic operations in the numerator
+        let numeratorValue
+        try {
+          // Use a safe evaluation approach for the numerator expression
+          if (numeratorExpression.match(/[+\-×÷^/]/)) {
+            // Split the input by operators while keeping the operators
+            const tokens = numeratorExpression.split(/([+\-×÷^/])/).filter((token) => token !== "")
 
-          // Add to history - store both equation and result
+            // Process the tokens sequentially
+            numeratorValue = Number.parseFloat(tokens[0])
+
+            for (let i = 1; i < tokens.length; i += 2) {
+              const operator = tokens[i]
+              const operand = Number.parseFloat(tokens[i + 1])
+
+              // Perform the operation
+              switch (operator) {
+                case "+":
+                  numeratorValue += operand
+                  break
+                case "-":
+                  numeratorValue -= operand
+                  break
+                case "×":
+                  numeratorValue *= operand
+                  break
+                case "÷":
+                  numeratorValue /= operand
+                  break
+                case "^":
+                  numeratorValue = Math.pow(numeratorValue, operand)
+                  break
+                case "/":
+                  numeratorValue /= operand
+                  break
+              }
+            }
+          } else {
+            numeratorValue = Number.parseFloat(numeratorExpression)
+          }
+        } catch (error) {
+          // If there's an error, try a simple parse
+          numeratorValue = Number.parseFloat(numeratorExpression)
+        }
+
+        // Handle basic operations in the denominator
+        let denominatorValue
+        try {
+          // Use a safe evaluation approach for the denominator expression
+          if (denominatorExpression.match(/[+\-×÷^/]/)) {
+            // Split the input by operators while keeping the operators
+            const tokens = denominatorExpression.split(/([+\-×÷^/])/).filter((token) => token !== "")
+
+            // Process the tokens sequentially
+            denominatorValue = Number.parseFloat(tokens[0])
+
+            for (let i = 1; i < tokens.length; i += 2) {
+              const operator = tokens[i]
+              const operand = Number.parseFloat(tokens[i + 1])
+
+              // Perform the operation
+              switch (operator) {
+                case "+":
+                  denominatorValue += operand
+                  break
+                case "-":
+                  denominatorValue -= operand
+                  break
+                case "×":
+                  denominatorValue *= operand
+                  break
+                case "÷":
+                  denominatorValue /= operand
+                  break
+                case "^":
+                  denominatorValue = Math.pow(denominatorValue, operand)
+                  break
+                case "/":
+                  denominatorValue /= operand
+                  break
+              }
+            }
+          } else {
+            denominatorValue = Number.parseFloat(denominatorExpression)
+          }
+        } catch (error) {
+          // If there's an error, try a simple parse
+          denominatorValue = Number.parseFloat(denominatorExpression)
+        }
+
+        if (denominatorValue === 0) {
+          currentInput = "Error"
+          isFractionMode = false
+        } else {
+          currentInput = (numeratorValue / denominatorValue).toString()
+
+          // Add to history
           history.push({
-            equation: equation,
+            equation: `${fractionData.numerator}/${fractionData.denominator}`,
             result: currentInput,
           })
           historyIndex = history.length
 
-          updateDisplay()
+          isFractionMode = false
         }
+        cursorIndex = currentInput.length
+        isCalculated = true
+        updateDisplay()
       } catch (error) {
         currentInput = "Error"
+        isFractionMode = false
         cursorIndex = currentInput.length
+        isCalculated = true
         updateDisplay()
       }
-      return
     }
+  }
 
-    // Insert a slash for fraction
-    insertAtCursor("/")
+  // Add this function to exit fraction mode
+  function exitFractionMode() {
+    if (fractionData.numerator && fractionData.denominator) {
+      calculateFraction()
+    } else {
+      isFractionMode = false
+      currentInput = "0"
+      cursorIndex = 1
+      updateDisplay()
+    }
+  }
+
+  // Modify the fraction button click handler
+  // Replace the existing fraction button click handler with this improved version
+  $("#fraction").on("click", () => {
+    if (isSettingTaxRate || isMuMode || isViewingHistory) return
+
+    // If already in fraction mode, calculate the result
+    if (isFractionMode) {
+      calculateFraction()
+    } else {
+      // Enter fraction mode
+      isFractionMode = true
+      activeFractionPart = "numerator"
+      fractionData = { numerator: "", denominator: "" }
+      renderFraction()
+    }
   })
 
   // Memory functions
@@ -998,8 +1204,21 @@ $(document).ready(() => {
   })
 
   // Arrow key navigation
+  // Modify the left and right arrow handlers to work with fractions
   $("#left-arrow").on("click", () => {
     if (isSettingTaxRate || isMuMode) return
+
+    if (isFractionMode) {
+      // In fraction mode, move cursor within the active part
+      const currentPart = fractionData[activeFractionPart]
+      if (currentPart.length > 0) {
+        // For now, we'll just implement a simple version -
+        // in a real implementation, you'd track cursor position within the fraction part
+        fractionData[activeFractionPart] = currentPart.slice(0, -1)
+        renderFraction()
+      }
+      return
+    }
 
     if (cursorIndex > 0) {
       cursorIndex--
@@ -1010,14 +1229,29 @@ $(document).ready(() => {
   $("#right-arrow").on("click", () => {
     if (isSettingTaxRate || isMuMode) return
 
+    if (isFractionMode) {
+      // In fraction mode, we could implement cursor movement within the fraction
+      // For now, we'll just switch between numerator and denominator
+      activeFractionPart = activeFractionPart === "numerator" ? "denominator" : "numerator"
+      renderFraction()
+      return
+    }
+
     if (cursorIndex < currentInput.length) {
       cursorIndex++
       updateDisplay()
     }
   })
 
-  // Update the up/down arrow navigation to work with intermediate results
+  // Modify the up/down arrow handlers to properly handle fraction mode
+  // Replace the existing up/down arrow click handlers with these
   $("#up-arrow").on("click", () => {
+    if (isFractionMode) {
+      activeFractionPart = "numerator"
+      renderFraction()
+      return
+    }
+
     if (isSettingTaxRate || isMuMode) return
     if (history.length === 0) return
 
@@ -1055,6 +1289,12 @@ $(document).ready(() => {
   })
 
   $("#down-arrow").on("click", () => {
+    if (isFractionMode) {
+      activeFractionPart = "denominator"
+      renderFraction()
+      return
+    }
+
     if (isSettingTaxRate || isMuMode) return
     if (!isViewingHistory || history.length === 0) return
 
@@ -1116,4 +1356,209 @@ $(document).ready(() => {
   setTimeout(() => {
     $cursorPosition.show()
   }, 1000)
+
+  function saveTaxRate() {
+    const newTaxRate = Number.parseFloat(currentInput.substring(10))
+    if (!isNaN(newTaxRate)) {
+      taxRate = newTaxRate
+    }
+    exitTaxRateMode()
+  }
+})
+
+// Remove the old cursor position element from the DOM since we're using inline cursors now
+$("#cursor-position").remove()
+
+// Add a global style for the blinking cursor animation
+if (!$("#cursor-animation").length) {
+  $("<style>")
+    .attr("id", "cursor-animation")
+    .prop("type", "text/css")
+    .html(`
+      @keyframes blink {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0; }
+      }
+    `)
+    .appendTo("head")
+}
+
+// Find the calculateFraction function and replace it with this enhanced version
+function calculateFraction() {
+  if (fractionData.numerator && fractionData.denominator) {
+    try {
+      // Instead of directly parsing as integers, evaluate the expressions
+      const numeratorExpression = fractionData.numerator
+      const denominatorExpression = fractionData.denominator
+
+      // Handle basic operations in the numerator
+      let numeratorValue
+      try {
+        // Use a safe evaluation approach for the numerator expression
+        if (numeratorExpression.match(/[+\-×÷^/]/)) {
+          // Split the input by operators while keeping the operators
+          const tokens = numeratorExpression.split(/([+\-×÷^/])/).filter((token) => token !== "")
+
+          // Process the tokens sequentially
+          numeratorValue = Number.parseFloat(tokens[0])
+
+          for (let i = 1; i < tokens.length; i += 2) {
+            const operator = tokens[i]
+            const operand = Number.parseFloat(tokens[i + 1])
+
+            // Perform the operation
+            switch (operator) {
+              case "+":
+                numeratorValue += operand
+                break
+              case "-":
+                numeratorValue -= operand
+                break
+              case "×":
+                numeratorValue *= operand
+                break
+              case "÷":
+                numeratorValue /= operand
+                break
+              case "^":
+                numeratorValue = Math.pow(numeratorValue, operand)
+                break
+              case "/":
+                numeratorValue /= operand
+                break
+            }
+          }
+        } else {
+          numeratorValue = Number.parseFloat(numeratorExpression)
+        }
+      } catch (error) {
+        // If there's an error, try a simple parse
+        numeratorValue = Number.parseFloat(numeratorExpression)
+      }
+
+      // Handle basic operations in the denominator
+      let denominatorValue
+      try {
+        // Use a safe evaluation approach for the denominator expression
+        if (denominatorExpression.match(/[+\-×÷^/]/)) {
+          // Split the input by operators while keeping the operators
+          const tokens = denominatorExpression.split(/([+\-×÷^/])/).filter((token) => token !== "")
+
+          // Process the tokens sequentially
+          denominatorValue = Number.parseFloat(tokens[0])
+
+          for (let i = 1; i < tokens.length; i += 2) {
+            const operator = tokens[i]
+            const operand = Number.parseFloat(tokens[i + 1])
+
+            // Perform the operation
+            switch (operator) {
+              case "+":
+                denominatorValue += operand
+                break
+              case "-":
+                denominatorValue -= operand
+                break
+              case "×":
+                denominatorValue *= operand
+                break
+              case "÷":
+                denominatorValue /= operand
+                break
+              case "^":
+                denominatorValue = Math.pow(denominatorValue, operand)
+                break
+              case "/":
+                denominatorValue /= operand
+                break
+            }
+          }
+        } else {
+          denominatorValue = Number.parseFloat(denominatorExpression)
+        }
+      } catch (error) {
+        // If there's an error, try a simple parse
+        denominatorValue = Number.parseFloat(denominatorExpression)
+      }
+
+      if (denominatorValue === 0) {
+        currentInput = "Error"
+        isFractionMode = false
+      } else {
+        currentInput = (numeratorValue / denominatorValue).toString()
+
+        // Add to history
+        history.push({
+          equation: `${fractionData.numerator}/${fractionData.denominator}`,
+          result: currentInput,
+        })
+        historyIndex = history.length
+
+        isFractionMode = false
+      }
+      cursorIndex = currentInput.length
+      isCalculated = true
+      updateDisplay()
+    } catch (error) {
+      currentInput = "Error"
+      isFractionMode = false
+      cursorIndex = currentInput.length
+      isCalculated = true
+      updateDisplay()
+    }
+  }
+}
+
+// Update the handleDigitInput function to allow operators in fraction mode
+function handleDigitInput(digit) {
+  if (isFractionMode) {
+    fractionData[activeFractionPart] += digit
+    renderFraction()
+  } else {
+    insertAtCursor(digit)
+  }
+}
+
+// Add this function to allow operators in fraction mode
+$("#add, #subtract, #multiply, #divide, #exponent").on("click", function () {
+  if (isSettingTaxRate || isMuMode) return
+
+  const value = $(this).text()
+
+  // Map the button text to the correct operator
+  let operator
+  switch (value) {
+    case "+":
+      operator = "+"
+      break
+    case "-":
+      operator = "-"
+      break
+    case "×":
+      operator = "×"
+      break
+    case "÷":
+      operator = "÷"
+      break
+    case "^":
+      operator = "^"
+      break
+    default:
+      operator = value
+  }
+
+  // If we're in fraction mode, add the operator to the active fraction part
+  if (isFractionMode) {
+    fractionData[activeFractionPart] += operator
+    renderFraction()
+    return
+  }
+
+  // If we just calculated a result, store the operation for repeat
+  if (isCalculated) {
+    lastOperation = operator
+    lastValue = Number.parseFloat(currentInput)
+  }
+
+  insertAtCursor(operator)
 })

@@ -146,6 +146,43 @@ body {
   width: 35px;
 }
 
+/* Fraction display styles */
+.fraction-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  font-size: 1.5em;
+}
+
+.numerator,
+.denominator {
+  text-align: center;
+  padding: 0 5px;
+}
+
+.fraction-bar {
+  width: 100%;
+  border-top: 1px solid black;
+  margin: 2px 0;
+}
+
+.active-fraction-part {
+  /* Remove background color */
+  background-color: transparent;
+  border-radius: 4px;
+}
+
+/* MU indicator */
+#mu-indicator {
+  position: absolute;
+  top: 5px;
+  right: 10px;
+  font-size: 12px;
+  opacity: 0;
+}
+
 /* Responsive design */
 @media (max-width: 340px) {
   .calculator-container {
@@ -202,11 +239,81 @@ body {
     width: 30px;
   }
 }
-/* Add this to ensure MU indicator is hidden by default */
-#mu-indicator {
-  position: absolute;
-  top: 5px;
-  right: 10px;
-  font-size: 12px;
-  opacity: 0; /* Hidden by default */
+.display {
+  width: 100%;
+  height: 100%;
+  border: none;
+  background: transparent;
+  text-align: right;
+  font-size: 24px;
+  font-family: "Digital-7", "Courier New", monospace;
+  color: black;
+  outline: none;
+  overflow: hidden;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  padding-right: 5px;
+}
+
+.fraction-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  font-size: 1em;
+}
+
+.numerator,
+.denominator {
+  display: block;
+  text-align: center;
+}
+
+.fraction-bar {
+  width: 100%;
+  height: 1px;
+  background-color: black;
+  margin: 2px 0;
+}
+
+.fraction-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  font-size: 1.5em;
+}
+
+.numerator,
+.denominator {
+  text-align: center;
+  min-width: 40px;
+  min-height: 24px;
+}
+
+.fraction-bar {
+  width: 100%;
+  height: 1px;
+  background-color: black;
+  margin: 2px 0;
+}
+
+.fraction-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  font-size: 1.5em;
+}
+
+.numerator,
+.denominator {
+  text-align: center;
+  min-width: 40px;
+  min-height: 24px;
+}
+
+.fraction-bar {
+  width: 100%;
+  height: 1px;
+  background-color: black;
+  margin: 2px 0;
 }
