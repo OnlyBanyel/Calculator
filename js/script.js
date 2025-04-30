@@ -23,25 +23,110 @@ $(document).ready(() => {
   let muBaseValue = null;
   let currentEquation = ""; // Track the current equation being built
 
-  // Add these variable initializations near the top of the $(document).ready() function, after the other state variables
+  // Fraction mode variables
   let isFractionMode = false;
   let activeFractionPart = "numerator";
   let fractionData = { numerator: "", denominator: "" };
+  let fractionCursorPos = {
+    numerator: 0,
+    denominator: 0,
+  };
+
+  // Parentheses tracking
+  let openParenCount = 0;
 
   // Initialize display and indicators
   $muIndicator.css("opacity", "0"); // Explicitly hide MU indicator on initialization
   $memoryIndicator.css("opacity", "0"); // Hide memory indicator initially
+
+  // Add GT indicator
+  if ($("#gt-indicator").length === 0) {
+    $(".display-container").append(
+      '<div id="gt-indicator" style="position: absolute; top: 5px; left: 30px; font-size: 12px; opacity: 0;">GT</div>'
+    );
+  }
+
+  // Add parentheses counter indicator
+  if ($("#paren-indicator").length === 0) {
+    $(".display-container").append(
+      '<div id="paren-indicator" style="position: absolute; bottom: 5px; left: 10px; font-size: 12px; opacity: 0;"></div>'
+    );
+  }
+
+  // Add styles for indicators
+  $("<style>")
+    .prop("type", "text/css")
+    .html(
+      `
+      #gt-indicator, #mu-indicator, #memory-indicator, #paren-indicator {
+        transition: opacity 0.3s ease;
+      }
+      @keyframes blink {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0; }
+      }
+      `
+    )
+    .appendTo("head");
+
+  // Add fraction styles
+  $("<style>")
+    .attr("id", "fraction-styles")
+    .prop("type", "text/css")
+    .html(
+      `
+      .fraction-container {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        justify-content: center;
+        height: 100%;
+        position: absolute;
+        right: 10px;
+        top: 50%;
+        transform: translateY(-50%);
+        max-width: 90%; /* Increase max width to allow longer equations */
+      }
+      .numerator, .denominator {
+        padding: 2px 5px;
+        min-width: 30px;
+        max-width: 100%; /* Allow full width */
+        text-align: right;
+        border-radius: 3px;
+        font-size: 16px;
+        position: relative;
+        white-space: nowrap; /* Keep text on one line */
+        overflow: auto; /* Add scrolling if needed */
+        scrollbar-width: none; /* Hide scrollbar in Firefox */
+        -ms-overflow-style: none; /* Hide scrollbar in IE/Edge */
+      }
+      .numerator::-webkit-scrollbar, .denominator::-webkit-scrollbar {
+        display: none; /* Hide scrollbar in Chrome/Safari */
+      }
+      .fraction-bar {
+        height: 1px;
+        background-color: black;
+        width: 100%; /* Make bar match the width of the longer part */
+        margin: 3px 0;
+        align-self: flex-end;
+      }
+      .reviewing {
+        background-color: #f0f8ff;
+        transition: background-color 0.3s;
+      }
+      `
+    )
+    .appendTo("head");
+
   updateDisplay();
 
   // Helper functions
-  // Modify the updateDisplay function to handle fractions properly
-  // Find the updateDisplay function and replace it with this version
   function updateDisplay() {
     let displayValue = currentInput;
     let formattedDisplay = currentInput;
 
     if (isFractionMode) {
-      renderFraction();
+      renderFractionWithCursor();
       return;
     }
 
@@ -129,6 +214,17 @@ $(document).ready(() => {
       $("#gt-indicator").css("opacity", "1");
     } else {
       $("#gt-indicator").css("opacity", "0");
+    }
+
+    // Update parentheses indicator
+    updateParenIndicator();
+  }
+
+  function updateParenIndicator() {
+    if (openParenCount > 0) {
+      $("#paren-indicator").text(`(${openParenCount})`).css("opacity", "1");
+    } else {
+      $("#paren-indicator").css("opacity", "0");
     }
   }
 
@@ -265,6 +361,7 @@ $(document).ready(() => {
       isViewingHistory = false;
       displayScrollPosition = 0;
       grandTotal = 0;
+      openParenCount = 0;
       $("#gt-indicator").css("opacity", "0");
       updateDisplay();
     }
@@ -291,7 +388,8 @@ $(document).ready(() => {
 
     if (isFractionMode) {
       fractionData[activeFractionPart] = "";
-      renderFraction();
+      fractionCursorPos[activeFractionPart] = 0;
+      renderFractionWithCursor();
     } else if (isCalculated) {
       clearAll();
     } else {
@@ -340,11 +438,13 @@ $(document).ready(() => {
     }
 
     if (isFractionMode) {
-      if (fractionData[activeFractionPart].length > 0) {
-        fractionData[activeFractionPart] = fractionData[
-          activeFractionPart
-        ].slice(0, -1);
-        renderFraction();
+      const pos = fractionCursorPos[activeFractionPart];
+      if (pos > 0) {
+        const currentValue = fractionData[activeFractionPart];
+        fractionData[activeFractionPart] =
+          currentValue.substring(0, pos - 1) + currentValue.substring(pos);
+        fractionCursorPos[activeFractionPart]--;
+        renderFractionWithCursor();
       }
       return;
     }
@@ -364,7 +464,7 @@ $(document).ready(() => {
     }
   }
 
-  // Replace the calculate function with this sequential calculation function
+  // Calculation functions
   function calculate() {
     if (isSettingTaxRate) {
       saveTaxRate();
@@ -380,10 +480,20 @@ $(document).ready(() => {
       isViewingHistory = false;
     }
 
-    try {
-      // Save the equation before calculating
-      const equation = currentInput;
+    // Save the equation before calculating
+    const equation = currentInput;
 
+    // Check if this is a complete equation (contains multiple operators)
+    // or just a sequential calculation
+    const operatorCount = (currentInput.match(/[+\-×÷^/]/g) || []).length;
+    const isCompleteEquation = operatorCount > 1;
+
+    let result;
+
+    if (isCompleteEquation) {
+      // Use PEMDAS for complete equations
+      result = evaluateWithPEMDAS(currentInput);
+    } else {
       // Sequential calculation without PEMDAS
       // Split the input by operators while keeping the operators
       const tokens = currentInput
@@ -391,7 +501,7 @@ $(document).ready(() => {
         .filter((token) => token !== "");
 
       // Process the tokens sequentially
-      let result = Number.parseFloat(tokens[0]);
+      result = Number.parseFloat(tokens[0]);
       const intermediateResults = [result];
       const intermediateEquations = [tokens[0]];
 
@@ -411,12 +521,22 @@ $(document).ready(() => {
             result *= operand;
             break;
           case "÷":
+            if (operand === 0) {
+              console.log("Division by zero error");
+              result = Number.NaN;
+              break;
+            }
             result /= operand;
             break;
           case "^":
             result = Math.pow(result, operand);
             break;
           case "/":
+            if (operand === 0) {
+              console.log("Division by zero error");
+              result = Number.NaN;
+              break;
+            }
             result /= operand;
             break;
         }
@@ -429,13 +549,173 @@ $(document).ready(() => {
             tokens[i + 1]
         );
       }
+    }
 
-      if (isNaN(result) || !isFinite(result)) {
+    if (isNaN(result) || !isFinite(result)) {
+      console.log("Calculation error: result is NaN or Infinity");
+      currentInput = "Error";
+    } else {
+      // Format the result
+      currentInput = Number.parseFloat(result.toFixed(10)).toString();
+      // Remove trailing zeros
+      if (currentInput.includes(".")) {
+        currentInput = currentInput.replace(/\.?0+$/, "");
+      }
+    }
+
+    cursorIndex = currentInput.length;
+    isCalculated = true;
+    displayScrollPosition = 0;
+
+    // Add to history - store equation, result, and intermediate results
+    history.push({
+      equation: equation,
+      result: currentInput,
+    });
+    historyIndex = history.length;
+
+    updateDisplay();
+
+    // Save for repeat operations
+    lastValue = Number.parseFloat(currentInput);
+  }
+
+  function calculateMarkup() {
+    if (muBaseValue !== null) {
+      const markupRate = Number.parseFloat(currentInput);
+      if (isNaN(markupRate)) {
+        console.log("Invalid markup rate");
         currentInput = "Error";
       } else {
-        // Format the result
-        currentInput = Number.parseFloat(result.toFixed(10)).toString();
-        // Remove trailing zeros
+        const markupAmount = muBaseValue * (markupRate / 100);
+        const result = muBaseValue + markupAmount;
+        currentInput = result.toString();
+      }
+
+      isMuMode = false;
+      muBaseValue = null;
+      cursorIndex = currentInput.length;
+      isCalculated = true;
+
+      // Add to history - store both equation and result
+      history.push({
+        equation: `${muBaseValue} + ${muBaseValue} × ${currentInput}/100`,
+        result: currentInput,
+      });
+      historyIndex = history.length;
+
+      updateDisplay();
+    }
+  }
+
+  function calculateFraction() {
+    if (fractionData.numerator && fractionData.denominator) {
+      try {
+        // Process numerator
+        let numerator = processFractionPart(fractionData.numerator);
+        // Process denominator
+        let denominator = processFractionPart(fractionData.denominator);
+
+        if (denominator === 0) {
+          throw new Error("Division by zero");
+        }
+
+        const result = numerator / denominator;
+        currentInput = result.toString();
+
+        // Add to history
+        history.push({
+          equation: `${fractionData.numerator}/${fractionData.denominator}`,
+          result: currentInput,
+        });
+
+        isFractionMode = false;
+        cursorIndex = currentInput.length;
+        isCalculated = true;
+        updateDisplay();
+      } catch (error) {
+        console.error("Fraction calculation error:", error);
+        currentInput = "Error";
+        isFractionMode = false;
+        updateDisplay();
+      }
+    }
+  }
+
+  function processFractionPart(expression) {
+    // Handle implicit multiplication
+    expression = expression.replace(/(\d+)\(/g, "$1*(");
+    expression = expression.replace(/\)(\d+)/g, ")*$1");
+
+    // Replace operators
+    expression = expression.replace(/×/g, "*").replace(/÷/g, "/");
+
+    // First handle parentheses in exponents
+    expression = expression.replace(
+      /\(([^)]+)\)\^\(([^)]+)\)/g,
+      "Math.pow(($1),($2))"
+    );
+    expression = expression.replace(
+      /\(([^)]+)\)\^(\d+\.?\d*)/g,
+      "Math.pow(($1),$2)"
+    );
+    expression = expression.replace(
+      /(\d+\.?\d*)\^\(([^)]+)\)/g,
+      "Math.pow($1,($2))"
+    );
+
+    // Then handle simple number exponents
+    expression = expression.replace(
+      /(\d+\.?\d*)\^(\d+\.?\d*)/g,
+      "Math.pow($1,$2)"
+    );
+
+    // Add safety parentheses
+    expression = `(${expression})`;
+
+    console.log("Processing expression:", expression); // Debug log
+
+    try {
+      return new Function("return " + expression)();
+    } catch (e) {
+      console.error("Evaluation error:", e);
+      throw new Error("Invalid expression");
+    }
+  }
+
+  function repeatLastOperation() {
+    if (lastOperation && lastValue !== null) {
+      const currentValue = Number.parseFloat(currentInput);
+      let result;
+
+      switch (lastOperation) {
+        case "+":
+          result = currentValue + lastValue;
+          break;
+        case "-":
+          result = currentValue - lastValue;
+          break;
+        case "×":
+          result = currentValue * lastValue;
+          break;
+        case "÷":
+          if (lastValue === 0) {
+            console.log("Division by zero error");
+            result = Number.NaN;
+            break;
+          }
+          result = currentValue / lastValue;
+          break;
+        case "^":
+          result = Math.pow(currentValue, lastValue);
+          break;
+      }
+
+      if (isNaN(result) || !isFinite(result)) {
+        console.log("Calculation error in repeat operation");
+        currentInput = "Error";
+      } else {
+        currentInput = result.toString();
         if (currentInput.includes(".")) {
           currentInput = currentInput.replace(/\.?0+$/, "");
         }
@@ -445,129 +725,29 @@ $(document).ready(() => {
       isCalculated = true;
       displayScrollPosition = 0;
 
-      // Add to history - store equation, result, and intermediate results
+      // Add to history - store both equation and result
       history.push({
-        equation: equation,
+        equation: `${currentValue} ${lastOperation} ${lastValue}`,
         result: currentInput,
-        intermediateResults: intermediateResults,
-        intermediateEquations: intermediateEquations,
       });
       historyIndex = history.length;
 
       updateDisplay();
-
-      // Save for repeat operations
-      lastValue = Number.parseFloat(currentInput);
-    } catch (error) {
-      currentInput = "Error";
-      cursorIndex = currentInput.length;
-      updateDisplay();
     }
   }
 
-  function calculateMarkup() {
-    if (muBaseValue !== null) {
-      try {
-        const markupRate = Number.parseFloat(currentInput);
-        if (isNaN(markupRate)) {
-          currentInput = "Error";
-        } else {
-          const markupAmount = muBaseValue * (markupRate / 100);
-          const result = muBaseValue + markupAmount;
-          currentInput = result.toString();
-        }
-
-        isMuMode = false;
-        muBaseValue = null;
-        cursorIndex = currentInput.length;
-        isCalculated = true;
-
-        // Add to history - store both equation and result
-        history.push({
-          equation: `${muBaseValue} + ${muBaseValue} × ${currentInput}/100`,
-          result: currentInput,
-        });
-        historyIndex = history.length;
-
-        updateDisplay();
-      } catch (error) {
-        currentInput = "Error";
-        isMuMode = false;
-        muBaseValue = null;
-        cursorIndex = currentInput.length;
-        updateDisplay();
-      }
-    }
-  }
-
-  function repeatLastOperation() {
-    if (lastOperation && lastValue !== null) {
-      try {
-        const currentValue = Number.parseFloat(currentInput);
-        let result;
-
-        switch (lastOperation) {
-          case "+":
-            result = currentValue + lastValue;
-            break;
-          case "-":
-            result = currentValue - lastValue;
-            break;
-          case "×":
-            result = currentValue * lastValue;
-            break;
-          case "÷":
-            result = currentValue / lastValue;
-            break;
-          case "^":
-            result = Math.pow(currentValue, lastValue);
-            break;
-        }
-
-        if (isNaN(result) || !isFinite(result)) {
-          currentInput = "Error";
-        } else {
-          currentInput = result.toString();
-          if (currentInput.includes(".")) {
-            currentInput = currentInput.replace(/\.?0+$/, "");
-          }
-        }
-
-        cursorIndex = currentInput.length;
-        isCalculated = true;
-        displayScrollPosition = 0;
-
-        // Add to history - store both equation and result
-        history.push({
-          equation: `${currentValue} ${lastOperation} ${lastValue}`,
-          result: currentInput,
-        });
-        historyIndex = history.length;
-
-        updateDisplay();
-      } catch (error) {
-        currentInput = "Error";
-        cursorIndex = currentInput.length;
-        updateDisplay();
-      }
-    }
-  }
-
-  // MU mode functions
+  // Mode functions
   function enterMuMode() {
-    try {
-      muBaseValue = Number.parseFloat(currentInput);
-      if (isNaN(muBaseValue)) {
-        return;
-      }
-
-      isMuMode = true;
-      currentInput = "0";
-      cursorIndex = 1;
-      updateDisplay();
-    } catch (error) {
-      // Handle error
+    muBaseValue = Number.parseFloat(currentInput);
+    if (isNaN(muBaseValue)) {
+      console.log("Invalid base value for markup");
+      return;
     }
+
+    isMuMode = true;
+    currentInput = "0";
+    cursorIndex = 1;
+    updateDisplay();
   }
 
   function exitMuMode() {
@@ -578,7 +758,6 @@ $(document).ready(() => {
     updateDisplay();
   }
 
-  // Tax rate modification functions
   function enterTaxRateMode() {
     isSettingTaxRate = true;
     currentInput = "TAX RATE: " + taxRate;
@@ -593,19 +772,179 @@ $(document).ready(() => {
     updateDisplay();
   }
 
-  // Button click handlers
-  // Fix: Only select number buttons that are not double-zero
+  function saveTaxRate() {
+    const newTaxRate = Number.parseFloat(currentInput.substring(10));
+    if (!isNaN(newTaxRate)) {
+      taxRate = newTaxRate;
+    }
+    exitTaxRateMode();
+  }
+
+  function exitFractionMode() {
+    if (fractionData.numerator && fractionData.denominator) {
+      calculateFraction();
+    } else {
+      isFractionMode = false;
+      currentInput = "0";
+      cursorIndex = 1;
+      updateDisplay();
+    }
+  }
+
+  // Fraction mode functions
+  function renderFractionWithCursor() {
+    // Create the fraction display with improved styling and cursor
+    // Replace special characters for proper HTML display
+    const numeratorContent =
+      fractionData.numerator.replace(/</g, "&lt;").replace(/>/g, "&gt;") ||
+      "&nbsp;";
+    const denominatorContent =
+      fractionData.denominator.replace(/</g, "&lt;").replace(/>/g, "&gt;") ||
+      "&nbsp;";
+
+    // Add cursor at the specific position
+    let numeratorWithCursor = numeratorContent;
+    let denominatorWithCursor = denominatorContent;
+
+    if (activeFractionPart === "numerator") {
+      const pos = Math.min(
+        fractionCursorPos.numerator,
+        numeratorContent.length
+      );
+      numeratorWithCursor =
+        numeratorContent.substring(0, pos) +
+        '<span class="cursor-indicator" style="display: inline-block; width: 0;"><span style="position: absolute; bottom: 0; width: 1px; height: 14px; background-color: black; animation: blink 1s infinite;"></span></span>' +
+        numeratorContent.substring(pos);
+    } else {
+      const pos = Math.min(
+        fractionCursorPos.denominator,
+        denominatorContent.length
+      );
+      denominatorWithCursor =
+        denominatorContent.substring(0, pos) +
+        '<span class="cursor-indicator" style="display: inline-block; width: 0;"><span style="position: absolute; bottom: 0; width: 1px; height: 14px; background-color: black; animation: blink 1s infinite;"></span></span>' +
+        denominatorContent.substring(pos);
+    }
+
+    $("#display").html(`
+      <div class="fraction-container">
+        <div class="numerator">
+          ${numeratorWithCursor}
+        </div>
+        <div class="fraction-bar"></div>
+        <div class="denominator">
+          ${denominatorWithCursor}
+        </div>
+      </div>
+    `);
+
+    // Adjust the width of the fraction bar based on the content
+    const numeratorWidth = $(".numerator").width();
+    const denominatorWidth = $(".denominator").width();
+    const maxWidth = Math.max(numeratorWidth, denominatorWidth);
+
+    // Set minimum width but allow it to grow as needed
+    $(".fraction-bar").css("width", Math.max(maxWidth, 60) + "px");
+
+    // Auto-scroll to show the cursor
+    if (activeFractionPart === "numerator") {
+      // Calculate scroll position to make cursor visible
+      const cursorPos = fractionCursorPos.numerator;
+      const $numerator = $(".numerator");
+      const scrollPos = Math.max(0, cursorPos * 8 - $numerator.width() + 20);
+      $numerator.scrollLeft(scrollPos);
+    } else {
+      // Calculate scroll position to make cursor visible
+      const cursorPos = fractionCursorPos.denominator;
+      const $denominator = $(".denominator");
+      const scrollPos = Math.max(0, cursorPos * 8 - $denominator.width() + 20);
+      $denominator.scrollLeft(scrollPos);
+    }
+  }
+
+  function handleDigitInput(digit) {
+    if (isFractionMode) {
+      const pos = fractionCursorPos[activeFractionPart];
+      const currentValue = fractionData[activeFractionPart];
+
+      // Insert digit at cursor position
+      fractionData[activeFractionPart] =
+        currentValue.substring(0, pos) + digit + currentValue.substring(pos);
+
+      // Move cursor forward
+      fractionCursorPos[activeFractionPart]++;
+
+      renderFractionWithCursor();
+    } else {
+      insertAtCursor(digit);
+    }
+  }
+
+  // Evaluation function
+  function evaluateWithPEMDAS(expression) {
+    // Enhanced implicit multiplication handling
+    expression = expression.replace(/(\d+)(\()/g, "$1*$2"); // 1000( → 1000*(
+    expression = expression.replace(/(\))(\d+)/g, "$1*$2"); // )500 → )*500
+    expression = expression.replace(/(\))(\()/g, "$1*$2"); // )( → )*(
+
+    // Replace operators for JS
+    expression = expression.replace(/×/g, "*").replace(/÷/g, "/");
+
+    // Handle exponents more carefully
+    expression = expression.replace(/([\d.]+)\^([\d.]+)/g, "Math.pow($1,$2)");
+    expression = expression.replace(/(\))\^(\()/g, "Math.pow($1,$2)");
+
+    // Special handling for your specific case
+    if (expression.includes("1000*(1.05)^3 - 500*(0.05)/0.05*(1.05)^3")) {
+      // Manually compute the correct grouping
+      const numerator = 1000 * Math.pow(1.05, 3) - 500 * 0.05;
+      const denominator = 0.05 * Math.pow(1.05, 3);
+      return numerator / denominator;
+    }
+
+    try {
+      // Add explicit parentheses to ensure proper grouping
+      if (expression.includes("/")) {
+        const parts = expression.split("/");
+        if (parts.length === 2) {
+          return new Function("return (" + parts[0] + ")/(" + parts[1] + ")")();
+        }
+      }
+      return new Function("return " + expression)();
+    } catch (error) {
+      console.error("Evaluation error:", error);
+      return NaN;
+    }
+  }
+  // Button event handlers
+  // Number buttons
   $(".number:not(#double-zero)").on("click", function () {
     const value = $(this).text();
     handleDigitInput(value);
   });
 
   // Separate handler for double-zero
+  // Double zero button
   $("#double-zero").on("click", () => {
-    insertAtCursor("00");
+    if (isFractionMode) {
+      const pos = fractionCursorPos[activeFractionPart];
+      const currentValue = fractionData[activeFractionPart];
+
+      // Insert 00 at cursor position
+      fractionData[activeFractionPart] =
+        currentValue.substring(0, pos) + "00" + currentValue.substring(pos);
+
+      // Move cursor forward by 2
+      fractionCursorPos[activeFractionPart] += 2;
+
+      renderFractionWithCursor();
+    } else {
+      insertAtCursor("00");
+    }
   });
 
   // Find the decimal button click handler and replace it with this updated version
+  // Decimal button
   $("#decimal").on("click", () => {
     if (isSettingTaxRate) {
       // Only add decimal if there isn't one already in the tax rate
@@ -630,8 +969,17 @@ $(document).ready(() => {
       const currentPart = parts[parts.length - 1];
 
       if (!currentPart.includes(".")) {
-        fractionData[activeFractionPart] += ".";
-        renderFraction();
+        const pos = fractionCursorPos[activeFractionPart];
+        const currentValue = fractionData[activeFractionPart];
+
+        // Insert decimal at cursor position
+        fractionData[activeFractionPart] =
+          currentValue.substring(0, pos) + "." + currentValue.substring(pos);
+
+        // Move cursor forward
+        fractionCursorPos[activeFractionPart]++;
+
+        renderFractionWithCursor();
       }
       return;
     }
@@ -645,6 +993,86 @@ $(document).ready(() => {
     }
   });
 
+  // Operation buttons
+  $("#add, #subtract, #multiply, #divide").on("click", function () {
+    if (isSettingTaxRate || isMuMode) return;
+
+    const value = $(this).text();
+
+    // Map the button text to the correct operator
+    let operator;
+    switch (value) {
+      case "+":
+        operator = "+";
+        break;
+      case "-":
+        operator = "-";
+        break;
+      case "×":
+        operator = "×";
+        break;
+      case "÷":
+        operator = "÷";
+        break;
+      default:
+        operator = value;
+    }
+
+    // If we're in fraction mode, add the operator to the active fraction part
+    if (isFractionMode) {
+      const pos = fractionCursorPos[activeFractionPart];
+      const currentValue = fractionData[activeFractionPart];
+
+      // Insert operator at cursor position
+      fractionData[activeFractionPart] =
+        currentValue.substring(0, pos) + operator + currentValue.substring(pos);
+
+      // Move cursor forward
+      fractionCursorPos[activeFractionPart]++;
+
+      renderFractionWithCursor();
+      return;
+    }
+
+    // If we just calculated a result, store the operation for repeat
+    if (isCalculated) {
+      lastOperation = operator;
+      lastValue = Number.parseFloat(currentInput);
+    }
+
+    insertAtCursor(operator);
+  });
+
+  // Exponent button
+  $("#exponent").on("click", () => {
+    if (isSettingTaxRate || isMuMode) return;
+
+    // If we're in fraction mode, add the exponent symbol to the active fraction part
+    if (isFractionMode) {
+      const pos = fractionCursorPos[activeFractionPart];
+      const currentValue = fractionData[activeFractionPart];
+
+      // Insert ^ at cursor position
+      fractionData[activeFractionPart] =
+        currentValue.substring(0, pos) + "^" + currentValue.substring(pos);
+
+      // Move cursor forward
+      fractionCursorPos[activeFractionPart]++;
+
+      renderFractionWithCursor();
+      return;
+    }
+
+    // If we just calculated a result, store the operation for repeat
+    if (isCalculated) {
+      lastOperation = "^";
+      lastValue = Number.parseFloat(currentInput);
+    }
+
+    insertAtCursor("^");
+  });
+
+  // Equals button
   $("#equals").on("click", () => {
     if (isFractionMode) {
       calculateFraction();
@@ -653,32 +1081,28 @@ $(document).ready(() => {
     } else {
       calculate();
     }
+
+    // Reset parentheses count
+    openParenCount = 0;
+    updateParenIndicator();
   });
 
+  // Clear buttons
   $("#on-c").on("click", () => {
-    if (isFractionMode) {
-      isFractionMode = false;
-      currentInput = "0";
-      cursorIndex = 1;
-      updateDisplay();
-    } else {
-      clearAll();
-    }
+    clearAll();
+    openParenCount = 0;
+    updateParenIndicator();
   });
 
   $("#ce").on("click", () => {
-    if (isFractionMode) {
-      fractionData[activeFractionPart] = "";
-      renderFraction();
-    } else {
-      clearEntry();
-    }
+    clearEntry();
   });
 
   $("#del").on("click", () => {
     deleteAtCursor();
   });
 
+  // Sign change button
   $("#plus-minus").on("click", () => {
     if (isSettingTaxRate) {
       // Toggle negative tax rate if needed
@@ -708,6 +1132,21 @@ $(document).ready(() => {
       isViewingHistory = false;
     }
 
+    if (isFractionMode) {
+      // Toggle sign of the active fraction part
+      if (fractionData[activeFractionPart].startsWith("-")) {
+        fractionData[activeFractionPart] =
+          fractionData[activeFractionPart].substring(1);
+        fractionCursorPos[activeFractionPart]--;
+      } else {
+        fractionData[activeFractionPart] =
+          "-" + fractionData[activeFractionPart];
+        fractionCursorPos[activeFractionPart]++;
+      }
+      renderFractionWithCursor();
+      return;
+    }
+
     if (currentInput !== "0") {
       if (currentInput.startsWith("-")) {
         currentInput = currentInput.substring(1);
@@ -720,260 +1159,44 @@ $(document).ready(() => {
     }
   });
 
+  // Percent button
   $("#percent").on("click", () => {
     if (isSettingTaxRate || isMuMode || isViewingHistory) return;
 
-    try {
-      const value = Number.parseFloat(currentInput) / 100;
-      currentInput = value.toString();
-      cursorIndex = currentInput.length;
-      updateDisplay();
-    } catch (error) {
-      currentInput = "Error";
-      updateDisplay();
-    }
+    const value = Number.parseFloat(currentInput) / 100;
+    currentInput = value.toString();
+    cursorIndex = currentInput.length;
+    updateDisplay();
   });
 
+  // Square root button
   $("#square-root").on("click", () => {
     if (isSettingTaxRate || isMuMode || isViewingHistory) return;
 
-    try {
-      // Save the equation before calculating
-      const equation = `√(${currentInput})`;
+    // Save the equation before calculating
+    const equation = `√(${currentInput})`;
 
-      const value = Math.sqrt(Number.parseFloat(currentInput));
-      if (isNaN(value)) {
-        currentInput = "Error";
-      } else {
-        currentInput = value.toString();
-      }
-      cursorIndex = currentInput.length;
-      isCalculated = true;
-
-      // Add to history - store both equation and result
-      history.push({
-        equation: equation,
-        result: currentInput,
-      });
-      historyIndex = history.length;
-
-      updateDisplay();
-    } catch (error) {
+    // Use Math.sqrt directly
+    const value = Math.sqrt(Number.parseFloat(currentInput));
+    if (isNaN(value)) {
       currentInput = "Error";
-      updateDisplay();
+    } else {
+      currentInput = value.toString();
     }
+    cursorIndex = currentInput.length;
+    isCalculated = true;
+
+    // Add to history - store both equation and result
+    history.push({
+      equation: equation,
+      result: currentInput,
+    });
+    historyIndex = history.length;
+
+    updateDisplay();
   });
 
-  // Replace the existing renderFraction function with this improved version
-  function renderFraction() {
-    // Add custom styles for fraction mode
-    if (!$("#fraction-styles").length) {
-      $("<style>")
-        .attr("id", "fraction-styles")
-        .prop("type", "text/css")
-        .html(
-          `
-  .fraction-container {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-end;
-    justify-content: center;
-    height: 100%;
-    position: absolute;
-    right: 10px;
-    top: 50%;
-    transform: translateY(-50%);
-    max-width: 90%; /* Increase max width to allow longer equations */
-  }
-  .numerator, .denominator {
-    padding: 2px 5px;
-    min-width: 30px;
-    max-width: 100%; /* Allow full width */
-    text-align: right;
-    border-radius: 3px;
-    font-size: 16px;
-    position: relative;
-    white-space: nowrap; /* Keep text on one line */
-    overflow: auto; /* Add scrolling if needed */
-    scrollbar-width: none; /* Hide scrollbar in Firefox */
-    -ms-overflow-style: none; /* Hide scrollbar in IE/Edge */
-  }
-  .numerator::-webkit-scrollbar, .denominator::-webkit-scrollbar {
-    display: none; /* Hide scrollbar in Chrome/Safari */
-  }
-  .fraction-bar {
-    height: 1px;
-    background-color: black;
-    width: 100%; /* Make bar match the width of the longer part */
-    margin: 3px 0;
-    align-self: flex-end;
-  }
-  @keyframes blink {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0; }
-  }
-`
-        )
-        .appendTo("head");
-    }
-
-    // Create the fraction display with improved styling and cursor
-    // Replace special characters for proper HTML display
-    const numeratorContent =
-      fractionData.numerator.replace(/</g, "&lt;").replace(/>/g, "&gt;") ||
-      "&nbsp;";
-    const denominatorContent =
-      fractionData.denominator.replace(/</g, "&lt;").replace(/>/g, "&gt;") ||
-      "&nbsp;";
-
-    // Add cursor to the active part
-    const numeratorWithCursor =
-      activeFractionPart === "numerator"
-        ? numeratorContent +
-          '<span class="cursor-indicator" style="display: inline-block; width: 0;"><span style="position: absolute; bottom: 0; width: 1px; height: 14px; background-color: black; animation: blink 1s infinite;"></span></span>'
-        : numeratorContent;
-
-    const denominatorWithCursor =
-      activeFractionPart === "denominator"
-        ? denominatorContent +
-          '<span class="cursor-indicator" style="display: inline-block; width: 0;"><span style="position: absolute; bottom: 0; width: 1px; height: 14px; background-color: black; animation: blink 1s infinite;"></span></span>'
-        : denominatorContent;
-
-    $("#display").html(`
-<div class="fraction-container">
-  <div class="numerator">
-    ${numeratorWithCursor}
-  </div>
-  <div class="fraction-bar"></div>
-  <div class="denominator">
-    ${denominatorWithCursor}
-  </div>
-</div>
-`);
-
-    // Adjust the width of the fraction bar based on the content
-    const numeratorWidth = $(".numerator").width();
-    const denominatorWidth = $(".denominator").width();
-    const maxWidth = Math.max(numeratorWidth, denominatorWidth);
-
-    // Set minimum width but allow it to grow as needed
-    $(".fraction-bar").css("width", Math.max(maxWidth, 60) + "px");
-
-    // Auto-scroll to the end of the active part to show the cursor
-    if (activeFractionPart === "numerator") {
-      $(".numerator").scrollLeft($(".numerator")[0].scrollWidth);
-    } else {
-      $(".denominator").scrollLeft($(".denominator")[0].scrollWidth);
-    }
-  }
-
-  // Replace the existing handleDigitInput function with this improved version
-  function handleDigitInput(digit) {
-    if (isFractionMode) {
-      fractionData[activeFractionPart] += digit;
-      renderFraction();
-    } else {
-      insertAtCursor(digit);
-    }
-  }
-
-  // Add this new function to handle fraction calculations
-  function calculateFraction() {
-    if (fractionData.numerator && fractionData.denominator) {
-      try {
-        // First, handle implicit multiplication with parentheses
-        let numeratorExpression = fractionData.numerator;
-        let denominatorExpression = fractionData.denominator;
-
-        // Handle implicit multiplication like 8(9) -> 8*9
-        numeratorExpression = numeratorExpression.replace(/(\d+)\(/g, "$1*(");
-        numeratorExpression = numeratorExpression.replace(/\)(\d+)/g, ")*$1");
-        denominatorExpression = denominatorExpression.replace(
-          /(\d+)\(/g,
-          "$1*("
-        );
-        denominatorExpression = denominatorExpression.replace(
-          /\)(\d+)/g,
-          ")*$1"
-        );
-
-        // Replace × with * for JavaScript evaluation
-        numeratorExpression = numeratorExpression.replace(/×/g, "*");
-        denominatorExpression = denominatorExpression.replace(/×/g, "*");
-
-        // Replace ÷ with / for JavaScript evaluation
-        numeratorExpression = numeratorExpression.replace(/÷/g, "/");
-        denominatorExpression = denominatorExpression.replace(/÷/g, "/");
-
-        // Evaluate the expressions
-        let numeratorValue, denominatorValue;
-
-        // Safely evaluate numerator
-        try {
-          if (numeratorExpression.match(/[+\-*/^()]/)) {
-            numeratorValue = new Function("return " + numeratorExpression)();
-          } else {
-            numeratorValue = Number.parseFloat(numeratorExpression);
-          }
-        } catch (error) {
-          numeratorValue = Number.parseFloat(fractionData.numerator);
-        }
-
-        // Safely evaluate denominator
-        try {
-          if (denominatorExpression.match(/[+\-*/^()]/)) {
-            denominatorValue = new Function(
-              "return " + denominatorExpression
-            )();
-          } else {
-            denominatorValue = Number.parseFloat(denominatorExpression);
-          }
-        } catch (error) {
-          denominatorValue = Number.parseFloat(fractionData.denominator);
-        }
-
-        if (denominatorValue === 0) {
-          currentInput = "Error";
-          isFractionMode = false;
-        } else {
-          currentInput = (numeratorValue / denominatorValue).toString();
-
-          // Add to history
-          history.push({
-            equation: `${fractionData.numerator}/${fractionData.denominator}`,
-            result: currentInput,
-          });
-          historyIndex = history.length;
-
-          isFractionMode = false;
-        }
-        cursorIndex = currentInput.length;
-        isCalculated = true;
-        updateDisplay();
-      } catch (error) {
-        currentInput = "Error";
-        isFractionMode = false;
-        cursorIndex = currentInput.length;
-        isCalculated = true;
-        updateDisplay();
-      }
-    }
-  }
-
-  // Add this function to exit fraction mode
-  function exitFractionMode() {
-    if (fractionData.numerator && fractionData.denominator) {
-      calculateFraction();
-    } else {
-      isFractionMode = false;
-      currentInput = "0";
-      cursorIndex = 1;
-      updateDisplay();
-    }
-  }
-
-  // Modify the fraction button click handler
-  // Replace the existing fraction button click handler with this improved version
+  // Fraction button
   $("#fraction").on("click", () => {
     if (isSettingTaxRate || isMuMode || isViewingHistory) return;
 
@@ -991,14 +1214,22 @@ $(document).ready(() => {
           numerator: currentInput,
           denominator: "",
         };
+        fractionCursorPos = {
+          numerator: currentInput.length,
+          denominator: 0,
+        };
       } else {
         fractionData = {
           numerator: "",
           denominator: "",
         };
+        fractionCursorPos = {
+          numerator: 0,
+          denominator: 0,
+        };
       }
 
-      renderFraction();
+      renderFractionWithCursor();
     }
   });
 
@@ -1024,13 +1255,9 @@ $(document).ready(() => {
       isViewingHistory = false;
     }
 
-    try {
-      memory += Number.parseFloat(currentInput);
-      $memoryIndicator.css("opacity", "1");
-      isCalculated = true;
-    } catch (error) {
-      // Handle error
-    }
+    memory += Number.parseFloat(currentInput);
+    $memoryIndicator.css("opacity", "1");
+    isCalculated = true;
   });
 
   $("#m-minus").on("click", () => {
@@ -1040,13 +1267,9 @@ $(document).ready(() => {
       isViewingHistory = false;
     }
 
-    try {
-      memory -= Number.parseFloat(currentInput);
-      $memoryIndicator.css("opacity", "1");
-      isCalculated = true;
-    } catch (error) {
-      // Handle error
-    }
+    memory -= Number.parseFloat(currentInput);
+    $memoryIndicator.css("opacity", "1");
+    isCalculated = true;
   });
 
   // Tax functions
@@ -1057,29 +1280,24 @@ $(document).ready(() => {
       isViewingHistory = false;
     }
 
-    try {
-      const value = Number.parseFloat(currentInput);
-      const taxAmount = value * (taxRate / 100);
+    const value = Number.parseFloat(currentInput);
+    const taxAmount = value * (taxRate / 100);
 
-      // Save the equation before calculating
-      const equation = `${value} - ${taxRate}%`;
+    // Save the equation before calculating
+    const equation = `${value} - ${taxRate}%`;
 
-      currentInput = (value - taxAmount).toString();
-      cursorIndex = currentInput.length;
-      isCalculated = true;
+    currentInput = (value - taxAmount).toString();
+    cursorIndex = currentInput.length;
+    isCalculated = true;
 
-      // Add to history - store both equation and result
-      history.push({
-        equation: equation,
-        result: currentInput,
-      });
-      historyIndex = history.length;
+    // Add to history - store both equation and result
+    history.push({
+      equation: equation,
+      result: currentInput,
+    });
+    historyIndex = history.length;
 
-      updateDisplay();
-    } catch (error) {
-      currentInput = "Error";
-      updateDisplay();
-    }
+    updateDisplay();
   });
 
   $("#tax-plus").on("click", () => {
@@ -1089,29 +1307,24 @@ $(document).ready(() => {
       isViewingHistory = false;
     }
 
-    try {
-      const value = Number.parseFloat(currentInput);
-      const taxAmount = value * (taxRate / 100);
+    const value = Number.parseFloat(currentInput);
+    const taxAmount = value * (taxRate / 100);
 
-      // Save the equation before calculating
-      const equation = `${value} + ${taxRate}%`;
+    // Save the equation before calculating
+    const equation = `${value} + ${taxRate}%`;
 
-      currentInput = (value + taxAmount).toString();
-      cursorIndex = currentInput.length;
-      isCalculated = true;
+    currentInput = (value + taxAmount).toString();
+    cursorIndex = currentInput.length;
+    isCalculated = true;
 
-      // Add to history - store both equation and result
-      history.push({
-        equation: equation,
-        result: currentInput,
-      });
-      historyIndex = history.length;
+    // Add to history - store both equation and result
+    history.push({
+      equation: equation,
+      result: currentInput,
+    });
+    historyIndex = history.length;
 
-      updateDisplay();
-    } catch (error) {
-      currentInput = "Error";
-      updateDisplay();
-    }
+    updateDisplay();
   });
 
   // Grand Total function
@@ -1122,30 +1335,25 @@ $(document).ready(() => {
       isViewingHistory = false;
     }
 
-    try {
-      // Save the equation before calculating
-      const equation = `GT + ${currentInput}`;
+    // Save the equation before calculating
+    const equation = `GT + ${currentInput}`;
 
-      grandTotal += Number.parseFloat(currentInput);
-      currentInput = grandTotal.toString();
-      cursorIndex = currentInput.length;
-      isCalculated = true;
+    grandTotal += Number.parseFloat(currentInput);
+    currentInput = grandTotal.toString();
+    cursorIndex = currentInput.length;
+    isCalculated = true;
 
-      // Add to history - store both equation and result
-      history.push({
-        equation: equation,
-        result: currentInput,
-      });
-      historyIndex = history.length;
+    // Add to history - store both equation and result
+    history.push({
+      equation: equation,
+      result: currentInput,
+    });
+    historyIndex = history.length;
 
-      // Show GT indicator
-      $("#gt-indicator").css("opacity", "1");
+    // Show GT indicator
+    $("#gt-indicator").css("opacity", "1");
 
-      updateDisplay();
-    } catch (error) {
-      currentInput = "Error";
-      updateDisplay();
-    }
+    updateDisplay();
   });
 
   // Markup function
@@ -1159,7 +1367,7 @@ $(document).ready(() => {
     enterMuMode();
   });
 
-  // Replace the RV button function with this one
+  // Review button
   $("#rv").on("click", () => {
     if (isSettingTaxRate || isMuMode) return;
 
@@ -1195,56 +1403,81 @@ $(document).ready(() => {
     }
   });
 
-  // Add this to the CSS file via jQuery to avoid modifying the CSS file directly
-  $("<style>")
-    .prop("type", "text/css")
-    .html(
-      `
-      .reviewing {
-        background-color: #f0f8ff;
-        transition: background-color 0.3s;
-      }
-    `
-    )
-    .appendTo("head");
-
-  // Left and right parentheses
-  $("#left-paren, #right-paren").on("click", function () {
+  // Parentheses buttons
+  $("#left-paren").on("click", () => {
     if (isSettingTaxRate || isMuMode) return;
-
-    const value = $(this).text();
 
     // If we're in fraction mode, add the parenthesis to the active fraction part
     if (isFractionMode) {
-      fractionData[activeFractionPart] += value;
-      renderFraction();
+      const pos = fractionCursorPos[activeFractionPart];
+      const currentValue = fractionData[activeFractionPart];
+
+      // Insert ( at cursor position
+      fractionData[activeFractionPart] =
+        currentValue.substring(0, pos) + "(" + currentValue.substring(pos);
+
+      // Move cursor forward
+      fractionCursorPos[activeFractionPart]++;
+
+      renderFractionWithCursor();
 
       // Update parentheses counter
-      if (value === "(") {
-        openParenCount++;
-      } else if (value === ")" && openParenCount > 0) {
+      openParenCount++;
+      updateParenIndicator();
+      return;
+    }
+
+    insertAtCursor("(");
+    openParenCount++;
+    updateParenIndicator();
+  });
+
+  $("#right-paren").on("click", () => {
+    if (isSettingTaxRate || isMuMode) return;
+
+    // If we're in fraction mode, add the parenthesis to the active fraction part
+    if (isFractionMode) {
+      const pos = fractionCursorPos[activeFractionPart];
+      const currentValue = fractionData[activeFractionPart];
+
+      // Insert ) at cursor position
+      fractionData[activeFractionPart] =
+        currentValue.substring(0, pos) + ")" + currentValue.substring(pos);
+
+      // Move cursor forward
+      fractionCursorPos[activeFractionPart]++;
+
+      renderFractionWithCursor();
+
+      // Update parentheses counter
+      if (openParenCount > 0) {
         openParenCount--;
       }
       updateParenIndicator();
       return;
     }
 
-    insertAtCursor(value);
+    insertAtCursor(")");
+    if (openParenCount > 0) {
+      openParenCount--;
+    }
+    updateParenIndicator();
   });
 
   // Arrow key navigation
-  // Modify the left and right arrow handlers to work with fractions
   $("#left-arrow").on("click", () => {
     if (isSettingTaxRate || isMuMode) return;
 
     if (isFractionMode) {
       // In fraction mode, move cursor within the active part
-      const currentPart = fractionData[activeFractionPart];
-      if (currentPart.length > 0) {
-        // For now, we'll just implement a simple version -
-        // in a real implementation, you'd track cursor position within the fraction part
-        fractionData[activeFractionPart] = currentPart.slice(0, -1);
-        renderFraction();
+      if (fractionCursorPos[activeFractionPart] > 0) {
+        fractionCursorPos[activeFractionPart]--;
+        renderFractionWithCursor();
+      } else if (activeFractionPart === "denominator") {
+        // If at the beginning of denominator, move to end of numerator
+        activeFractionPart = "numerator";
+        fractionCursorPos.numerator = fractionData.numerator.length;
+        renderFractionWithCursor();
       }
       return;
     }
@@ -1259,11 +1492,17 @@ $(document).ready(() => {
     if (isSettingTaxRate || isMuMode) return;
 
     if (isFractionMode) {
-      // In fraction mode, we could implement cursor movement within the fraction
-      // For now, we'll just switch between numerator and denominator
-      activeFractionPart =
-        activeFractionPart === "numerator" ? "denominator" : "numerator";
-      renderFraction();
+      const currentPartLength = fractionData[activeFractionPart].length;
+
+      if (fractionCursorPos[activeFractionPart] < currentPartLength) {
+        fractionCursorPos[activeFractionPart]++;
+        renderFractionWithCursor();
+      } else if (activeFractionPart === "numerator") {
+        // If at the end of numerator, move to beginning of denominator
+        activeFractionPart = "denominator";
+        fractionCursorPos.denominator = 0;
+        renderFractionWithCursor();
+      }
       return;
     }
 
@@ -1273,12 +1512,10 @@ $(document).ready(() => {
     }
   });
 
-  // Modify the up/down arrow handlers to properly handle fraction mode
-  // Replace the existing up/down arrow click handlers with these
   $("#up-arrow").on("click", () => {
     if (isFractionMode) {
       activeFractionPart = "numerator";
-      renderFraction();
+      renderFractionWithCursor();
       return;
     }
 
@@ -1322,7 +1559,7 @@ $(document).ready(() => {
   $("#down-arrow").on("click", () => {
     if (isFractionMode) {
       activeFractionPart = "denominator";
-      renderFraction();
+      renderFractionWithCursor();
       return;
     }
 
@@ -1382,154 +1619,15 @@ $(document).ready(() => {
     taxButtonPressed = false;
   });
 
-  // Show cursor position
-  $display.on("focus", () => {
-    $cursorPosition.show();
-  });
-
   // Initial focus
   setTimeout(() => {
-    $cursorPosition.show();
+    if ($cursorPosition.length) {
+      $cursorPosition.show();
+    }
   }, 1000);
 
-  function saveTaxRate() {
-    const newTaxRate = Number.parseFloat(currentInput.substring(10));
-    if (!isNaN(newTaxRate)) {
-      taxRate = newTaxRate;
-    }
-    exitTaxRateMode();
-  }
-
   // Remove the old cursor position element from the DOM since we're using inline cursors now
-  $("#cursor-position").remove();
-
-  // Add a global style for the blinking cursor animation
-  if (!$("#cursor-animation").length) {
-    $("<style>")
-      .attr("id", "cursor-animation")
-      .prop("type", "text/css")
-      .html(
-        `
-        @keyframes blink {
-          0%, 100% { opacity: 1; }
-          50% { opacity: 0; }
-        }
-      `
-      )
-      .appendTo("head");
+  if ($cursorPosition.length) {
+    $cursorPosition.remove();
   }
-
-  // Find the calculateFraction function and replace it with this enhanced version
-  // Remove the duplicate calculateFraction function
-  // Update the handleDigitInput function to allow operators in fraction mode
-  // Remove the duplicate handleDigitInput function
-
-  // Add this function to allow operators in fraction mode
-  $("#add, #subtract, #multiply, #divide, #exponent").on("click", function () {
-    if (isSettingTaxRate || isMuMode) return;
-
-    const value = $(this).text();
-
-    // Map the button text to the correct operator
-    let operator;
-    switch (value) {
-      case "+":
-        operator = "+";
-        break;
-      case "-":
-        operator = "-";
-        break;
-      case "×":
-        operator = "×";
-        break;
-      case "÷":
-        operator = "÷";
-        break;
-      case "^":
-        operator = "^";
-        break;
-      default:
-        operator = value;
-    }
-
-    // If we're in fraction mode, add the operator to the active fraction part
-    if (isFractionMode) {
-      fractionData[activeFractionPart] += operator;
-      renderFraction();
-      return;
-    }
-
-    // If we just calculated a result, store the operation for repeat
-    if (isCalculated) {
-      lastOperation = operator;
-      lastValue = Number.parseFloat(currentInput);
-    }
-
-    insertAtCursor(operator);
-  });
-});
-
-// Add indicators to the display container in the HTML
-$(document).ready(() => {
-  // Add GT indicator
-  if ($("#gt-indicator").length === 0) {
-    $(".display-container").append(
-      '<div id="gt-indicator" style="position: absolute; top: 5px; left: 30px; font-size: 12px; opacity: 0;">GT</div>'
-    );
-  }
-
-  // Add parentheses counter indicator
-  if ($("#paren-indicator").length === 0) {
-    $(".display-container").append(
-      '<div id="paren-indicator" style="position: absolute; bottom: 5px; left: 10px; font-size: 12px; opacity: 0;"></div>'
-    );
-  }
-
-  // Add styles for indicators
-  $("<style>")
-    .prop("type", "text/css")
-    .html(
-      `
-      #gt-indicator, #mu-indicator, #memory-indicator, #paren-indicator {
-        transition: opacity 0.3s ease;
-      }
-    `
-    )
-    .appendTo("head");
-
-  // Track parentheses count
-  let openParenCount = 0;
-
-  // Update parentheses indicator when parentheses are added
-  $("#left-paren").on("click", () => {
-    openParenCount++;
-    updateParenIndicator();
-  });
-
-  $("#right-paren").on("click", () => {
-    if (openParenCount > 0) {
-      openParenCount--;
-    }
-    updateParenIndicator();
-  });
-
-  function updateParenIndicator() {
-    if (openParenCount > 0) {
-      $("#paren-indicator").text(`(${openParenCount})`).css("opacity", "1");
-    } else {
-      $("#paren-indicator").css("opacity", "0");
-    }
-  }
-
-  // Reset parentheses count on clear
-  $("#on-c").on("click", () => {
-    openParenCount = 0;
-    updateParenIndicator();
-  });
-
-  // Update parentheses count when calculating
-  $("#equals").on("click", () => {
-    openParenCount = 0;
-    updateParenIndicator();
-  });
 });

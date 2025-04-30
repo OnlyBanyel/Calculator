@@ -1,91 +1,95 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Accounting Calculator</title>
-    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/style.css" />
     <script src="vendors/jquery-3.7.1/jquery-3.7.1.min.js"></script>
-</head>
-<body>
+  </head>
+  <body>
     <div class="calculator-container">
-        <div class="calculator">
-            <div class="display-container">
-                <div id="display" disabled>0</div>
-                <div id="memory-indicator">M</div>
-                <div id="mu-indicator">MU</div>
-                <div id="cursor-position"></div>
-            </div>
-            
-            <div class="button-container">
-                <!-- Arrow row as first row right below the display -->
-                <div class="row arrow-row">
-                    <button class="button black-button" id="left-arrow">←</button>
-                    <div class="vert-buttons">
-                        <button class="button black-button" id="up-arrow">↑</button>
-                        <button class="button black-button" id="down-arrow">↓</button>
-                    </div>
-                    <button class="button black-button" id="right-arrow">→</button>
-                </div>
-                
-                <div class="row top-row">
-                    <button class="button red-button" id="on-c">ON/C</button>
-                    <button class="button red-button" id="ce">CE</button>
-                    <button class="button black-button" id="tax">TAX-</button>
-                    <button class="button black-button" id="tax-plus">TAX+</button>
-                    <button class="button black-button" id="percent">%</button>
-                </div>
-                
-                <div class="row">
-                    <button class="button black-button" id="exponent">^</button>
-                    <button class="button black-button" id="fraction">a/b</button>
-                    <button class="button black-button" id="del">DEL</button>
-                    <button class="button black-button" id="left-paren">(</button>
-                    <button class="button black-button" id="right-paren">)</button>
-                </div>
-                
-                <div class="row">
-                    <button class="button black-button" id="rm-cm">RM/CM</button>
-                    <button class="button black-button" id="m-plus">M+</button>
-                    <button class="button black-button" id="m-minus">M-</button>
-                    <button class="button black-button" id="plus-minus">+/-</button>
-                    <button class="button black-button" id="gt">GT</button>
-                </div>
-                
-                <div class="row">
-                    <button class="button black-button number" id="seven">7</button>
-                    <button class="button black-button number" id="eight">8</button>
-                    <button class="button black-button number" id="nine">9</button>
-                    <button class="button black-button" id="square-root">√</button>
-                    <button class="button black-button" id="mu">MU</button>
-                </div>
-                
-                <div class="row">
-                    <button class="button black-button number" id="four">4</button>
-                    <button class="button black-button number" id="five">5</button>
-                    <button class="button black-button number" id="six">6</button>
-                    <button class="button black-button" id="multiply">×</button>
-                    <button class="button black-button" id="rv">RV</button>
-                </div>
-                
-                <div class="row">
-                    <button class="button black-button number" id="one">1</button>
-                    <button class="button black-button number" id="two">2</button>
-                    <button class="button black-button number" id="three">3</button>
-                    <button class="button black-button" id="subtract">-</button>
-                    <button class="button black-button" id="divide">÷</button>
-                </div>
-                
-                <div class="row">
-                    <button class="button black-button number" id="zero">0</button>
-                    <button class="button black-button number" id="double-zero">00</button>
-                    <button class="button black-button" id="decimal">.</button>
-                    <button class="button black-button" id="add">+</button>
-                    <button class="button black-button" id="equals">=</button>
-                </div>
-            </div>
+      <div class="calculator">
+        <div class="display-container">
+          <div id="display" disabled>0</div>
+          <div id="memory-indicator">M</div>
+          <div id="mu-indicator">MU</div>
+          <div id="cursor-position"></div>
         </div>
+
+        <div class="button-container">
+          <!-- Arrow row as first row right below the display -->
+          <div class="row arrow-row">
+            <button class="button black-button" id="left-arrow">←</button>
+            <div class="vert-buttons">
+              <button class="button black-button" id="up-arrow">↑</button>
+              <button class="button black-button" id="down-arrow">↓</button>
+            </div>
+            <button class="button black-button" id="right-arrow">→</button>
+          </div>
+
+          <div class="row top-row">
+            <button class="button red-button" id="on-c">ON/C</button>
+            <button class="button red-button" id="ce">CE</button>
+            <button class="button black-button" id="tax">TAX-</button>
+            <button class="button black-button" id="tax-plus">TAX+</button>
+            <button class="button black-button" id="percent">%</button>
+          </div>
+
+          <div class="row">
+            <button class="button black-button" id="exponent">
+              x<sup>y</sup>
+            </button>
+            <button class="button black-button" id="fraction">a/b</button>
+            <button class="button black-button" id="del">DEL</button>
+            <button class="button black-button" id="left-paren">(</button>
+            <button class="button black-button" id="right-paren">)</button>
+          </div>
+
+          <div class="row">
+            <button class="button black-button" id="rm-cm">RM/CM</button>
+            <button class="button black-button" id="m-plus">M+</button>
+            <button class="button black-button" id="m-minus">M-</button>
+            <button class="button black-button" id="plus-minus">+/-</button>
+            <button class="button black-button" id="gt">GT</button>
+          </div>
+
+          <div class="row">
+            <button class="button black-button number" id="seven">7</button>
+            <button class="button black-button number" id="eight">8</button>
+            <button class="button black-button number" id="nine">9</button>
+            <button class="button black-button" id="square-root">√</button>
+            <button class="button black-button" id="mu">MU</button>
+          </div>
+
+          <div class="row">
+            <button class="button black-button number" id="four">4</button>
+            <button class="button black-button number" id="five">5</button>
+            <button class="button black-button number" id="six">6</button>
+            <button class="button black-button" id="multiply">×</button>
+            <button class="button black-button" id="rv">RV</button>
+          </div>
+
+          <div class="row">
+            <button class="button black-button number" id="one">1</button>
+            <button class="button black-button number" id="two">2</button>
+            <button class="button black-button number" id="three">3</button>
+            <button class="button black-button" id="subtract">-</button>
+            <button class="button black-button" id="divide">÷</button>
+          </div>
+
+          <div class="row">
+            <button class="button black-button number" id="zero">0</button>
+            <button class="button black-button number" id="double-zero">
+              00
+            </button>
+            <button class="button black-button" id="decimal">.</button>
+            <button class="button black-button" id="add">+</button>
+            <button class="button black-button" id="equals">=</button>
+          </div>
+        </div>
+      </div>
     </div>
     <script src="js/script.js"></script>
-</body>
+  </body>
 </html>
