@@ -187,12 +187,10 @@ $(document).ready(() => {
       tempContainer.remove();
 
       // Insert cursor at the calculated position
-      const displayText = $("#display").html();
-      const cursorHtml = `<span class="cursor-indicator" style="position: relative; display: inline-block; width: 0;">
-                      <span style="position: absolute; bottom: 0; left: 0; width: 1px; height: 18px; background-color: black; animation: blink 1s infinite;"></span>
-                    </span>`;
+      const cursorHtml = `<span class="cursor" style="border-left: 1px solid black; height: 20px;"></span>`;
+      const displayText = $("#display").text();
 
-      if (cursorIndex === 0) {
+      if (cursorIndex <= 0) {
         $("#display").html(cursorHtml + displayText);
       } else if (cursorIndex >= displayText.length) {
         $("#display").html(displayText + cursorHtml);
@@ -202,6 +200,12 @@ $(document).ready(() => {
             cursorHtml +
             displayText.substring(cursorIndex)
         );
+      }
+
+      // Scroll to cursor
+      const cursorPos = $(".cursor").position();
+      if (cursorPos) {
+        $("#display").scrollLeft(cursorPos.left - 50);
       }
     }
 
@@ -609,36 +613,37 @@ $(document).ready(() => {
   }
 
   function calculateFraction() {
-    if (fractionData.numerator && fractionData.denominator) {
-      try {
-        // Process numerator
-        let numerator = processFractionPart(fractionData.numerator);
-        // Process denominator
-        let denominator = processFractionPart(fractionData.denominator);
+    if (!fractionData.denominator || Number(fractionData.denominator) === 0) {
+      currentInput = "Error";
+      isFractionMode = false;
+      updateDisplay();
+      return;
+    }
 
-        if (denominator === 0) {
-          throw new Error("Division by zero");
-        }
+    try {
+      const numerator = processFractionPart(fractionData.numerator || "0");
+      const denominator = processFractionPart(fractionData.denominator || "1");
 
-        const result = numerator / denominator;
-        currentInput = result.toString();
+      if (denominator === 0) throw new Error("Division by zero");
 
-        // Add to history
-        history.push({
-          equation: `${fractionData.numerator}/${fractionData.denominator}`,
-          result: currentInput,
-        });
+      const result = numerator / denominator;
+      currentInput = Number.isInteger(result)
+        ? result.toString()
+        : result.toFixed(10).replace(/\.?0+$/, "");
 
-        isFractionMode = false;
-        cursorIndex = currentInput.length;
-        isCalculated = true;
-        updateDisplay();
-      } catch (error) {
-        console.error("Fraction calculation error:", error);
-        currentInput = "Error";
-        isFractionMode = false;
-        updateDisplay();
-      }
+      history.push({
+        equation: `${fractionData.numerator}/${fractionData.denominator}`,
+        result: currentInput,
+      });
+
+      isFractionMode = false;
+      cursorIndex = currentInput.length;
+      isCalculated = true;
+      updateDisplay();
+    } catch (error) {
+      currentInput = "Error";
+      isFractionMode = false;
+      updateDisplay();
     }
   }
 
@@ -773,9 +778,11 @@ $(document).ready(() => {
   }
 
   function saveTaxRate() {
-    const newTaxRate = Number.parseFloat(currentInput.substring(10));
+    const rateStr = currentInput.substring(10).trim();
+    const newTaxRate = parseFloat(rateStr);
+
     if (!isNaN(newTaxRate)) {
-      taxRate = newTaxRate;
+      taxRate = Math.min(100, Math.max(0, newTaxRate)); // Clamp between 0-100
     }
     exitTaxRateMode();
   }
@@ -1160,11 +1167,22 @@ $(document).ready(() => {
   });
 
   // Percent button
-  $("#percent").on("click", () => {
-    if (isSettingTaxRate || isMuMode || isViewingHistory) return;
+  $("#percent").on("click", function () {
+    if (isSettingTaxRate || isMuMode) return;
 
-    const value = Number.parseFloat(currentInput) / 100;
-    currentInput = value.toString();
+    // Handle different contexts:
+    if (isFractionMode) {
+      // Handle percent in fraction mode
+    } else if (lastOperation) {
+      // Handle percent after operator (e.g., 100 + 10%)
+      const value = (parseFloat(currentInput) / 100) * lastValue;
+      currentInput = value.toString();
+    } else {
+      // Simple percentage
+      const value = parseFloat(currentInput) / 100;
+      currentInput = value.toString();
+    }
+
     cursorIndex = currentInput.length;
     updateDisplay();
   });
@@ -1234,19 +1252,27 @@ $(document).ready(() => {
   });
 
   // Memory functions
-  $("#rm-cm").on("click", () => {
-    if (isSettingTaxRate || isMuMode || isViewingHistory) return;
+  $("#rm-cm")
+    .on("click", function () {
+      if (isSettingTaxRate || isMuMode || isViewingHistory) return;
 
-    // Double click or long press would clear memory, but for now just toggle
-    if (memory !== 0) {
-      currentInput = memory.toString();
-      cursorIndex = currentInput.length;
-      updateDisplay();
-    } else {
+      // Single click - recall memory
+      if (memory !== 0) {
+        currentInput = memory.toString();
+        cursorIndex = currentInput.length;
+        updateDisplay();
+      }
+    })
+    .on("dblclick", function () {
+      // Double click - clear memory
       memory = 0;
       $memoryIndicator.css("opacity", "0");
-    }
-  });
+      if (currentInput === memory.toString()) {
+        currentInput = "0";
+        cursorIndex = 1;
+        updateDisplay();
+      }
+    });
 
   $("#m-plus").on("click", () => {
     if (isSettingTaxRate || isMuMode) return;
@@ -1328,33 +1354,22 @@ $(document).ready(() => {
   });
 
   // Grand Total function
-  $("#gt").on("click", () => {
+  $("#gt").on("click", function () {
     if (isSettingTaxRate || isMuMode) return;
 
-    if (isViewingHistory) {
-      isViewingHistory = false;
-    }
+    const value = parseFloat(currentInput) || 0;
+    grandTotal += value;
 
-    // Save the equation before calculating
-    const equation = `GT + ${currentInput}`;
-
-    grandTotal += Number.parseFloat(currentInput);
-    currentInput = grandTotal.toString();
+    // Round to 2 decimal places for monetary values
+    currentInput = Math.round(grandTotal * 100) / 100 + "";
     cursorIndex = currentInput.length;
     isCalculated = true;
-
-    // Add to history - store both equation and result
-    history.push({
-      equation: equation,
-      result: currentInput,
-    });
-    historyIndex = history.length;
-
-    // Show GT indicator
-    $("#gt-indicator").css("opacity", "1");
-
     updateDisplay();
   });
+
+  // Add to clearAll():
+  grandTotal = 0;
+  $("#gt-indicator").css("opacity", "0");
 
   // Markup function
   $("#mu").on("click", () => {
