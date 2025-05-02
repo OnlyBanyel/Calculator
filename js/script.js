@@ -22,7 +22,6 @@ $(document).ready(() => {
   let isMuMode = false; // Ensure this is false by default
   let muBaseValue = null;
   let currentEquation = ""; // Track the current equation being built
-
   // Fraction mode variables
   let isFractionMode = false;
   let activeFractionPart = "numerator";
@@ -261,6 +260,40 @@ $(document).ready(() => {
   }
 
   function insertAtCursor(text) {
+    if (isRootMode) {
+      if (text === ")") {
+        // Complete the degree specification
+        if (currentInput.includes("(") && !currentInput.includes(")")) {
+          currentInput =
+            currentInput.substring(0, cursorIndex) +
+            ")" +
+            currentInput.substring(cursorIndex);
+          cursorIndex++;
+          updateDisplay();
+        }
+      } else if (
+        !isNaN(text) &&
+        currentInput.includes("(") &&
+        !currentInput.includes(")")
+      ) {
+        // Add digit to root degree
+        currentInput =
+          currentInput.substring(0, cursorIndex) +
+          text +
+          currentInput.substring(cursorIndex);
+        cursorIndex++;
+        updateDisplay();
+      } else if (!isNaN(text) || text === ".") {
+        // Add digit to the value being rooted
+        currentInput =
+          currentInput.substring(0, cursorIndex) +
+          text +
+          currentInput.substring(cursorIndex);
+        cursorIndex++;
+        updateDisplay();
+      }
+      return;
+    }
     if (isSettingTaxRate) {
       // When setting tax rate, only allow numbers and decimal
       if (!isNaN(text) || text === ".") {
@@ -414,6 +447,35 @@ $(document).ready(() => {
   }
 
   function deleteAtCursor() {
+    if (isRootMode) {
+      const rootPos = currentInput.indexOf("√");
+
+      if (cursorIndex > 0) {
+        if (cursorIndex <= rootPos) {
+          // Deleting from degree
+          currentInput =
+            currentInput.substring(0, cursorIndex - 1) +
+            currentInput.substring(cursorIndex);
+
+          // Ensure we don't delete the √ symbol
+          if (currentInput.indexOf("√") === -1) {
+            currentInput = "2√" + currentInput;
+            cursorIndex = 1;
+          } else {
+            cursorIndex--;
+          }
+        } else {
+          // Deleting from radicand
+          currentInput =
+            currentInput.substring(0, cursorIndex - 1) +
+            currentInput.substring(cursorIndex);
+          cursorIndex--;
+        }
+
+        updateDisplay();
+      }
+      return;
+    }
     if (isSettingTaxRate) {
       if (currentInput.length > 10) {
         // "TAX RATE: " is 10 characters
@@ -478,6 +540,10 @@ $(document).ready(() => {
 
   // Calculation functions
   function calculate() {
+    if (isRootMode) {
+      calculateRoot();
+      return;
+    }
     if (isSettingTaxRate) {
       saveTaxRate();
       return;
@@ -869,6 +935,34 @@ $(document).ready(() => {
   }
 
   function handleDigitInput(digit) {
+    if (isRootMode) {
+      const rootPos = currentInput.indexOf("√");
+
+      if (cursorIndex <= rootPos) {
+        // Editing the degree (before √)
+        if (cursorIndex === 0) {
+          // Insert at beginning
+          currentInput = digit + currentInput;
+        } else {
+          // Insert at cursor position
+          currentInput =
+            currentInput.substring(0, cursorIndex) +
+            digit +
+            currentInput.substring(cursorIndex);
+        }
+        cursorIndex++;
+      } else {
+        // Editing the radicand (after √)
+        currentInput =
+          currentInput.substring(0, cursorIndex) +
+          digit +
+          currentInput.substring(cursorIndex);
+        cursorIndex++;
+      }
+
+      updateDisplay();
+      return;
+    }
     if (isFractionMode) {
       const pos = fractionCursorPos[activeFractionPart];
       const currentValue = fractionData[activeFractionPart];
@@ -1080,15 +1174,14 @@ $(document).ready(() => {
 
   // Equals button
   $("#equals").on("click", () => {
-    if (isFractionMode) {
+    if (isRootMode) {
+      calculateRoot();
+    } else if (isFractionMode) {
       calculateFraction();
     } else {
       calculate();
     }
-
-    // Reset parentheses count
-    openParenCount = 0;
-    updateParenIndicator();
+    updateDisplay();
   });
 
   // Clear buttons
@@ -1184,33 +1277,69 @@ $(document).ready(() => {
     updateDisplay();
   });
 
-  // Square root button
-  $("#square-root").on("click", () => {
+  // Add to calculator state variables
+  // Add to calculator state variables at the top
+  // Add to calculator state variables at the top
+  let isRootMode = false;
+  let rootDegree = "";
+
+  // Modified square root button handler
+  $("#square-root").on("click", function () {
     if (isSettingTaxRate || isMuMode || isViewingHistory) return;
 
-    // Save the equation before calculating
-    const equation = `√(${currentInput})`;
-
-    // Use Math.sqrt directly
-    const value = Math.sqrt(Number.parseFloat(currentInput));
-    if (isNaN(value)) {
-      currentInput = "Error";
-    } else {
-      currentInput = value.toString();
+    if (isRootMode) {
+      // If already in root mode, calculate the root
+      calculateRoot();
+      return;
     }
-    cursorIndex = currentInput.length;
-    isCalculated = true;
 
-    // Add to history - store both equation and result
-    history.push({
-      equation: equation,
-      result: currentInput,
-    });
-    historyIndex = history.length;
+    // Enter root mode
+    isRootMode = true;
+
+    // Use the current input as the radicand (value under root)
+    const radicand =
+      currentInput !== "0" && !isNaN(currentInput) ? currentInput : "";
+
+    // Set up the display with default degree of 2 (square root)
+    rootDegree = "2";
+    currentInput = rootDegree + "√" + radicand;
+    cursorIndex = currentInput.indexOf("√") + 1; // Position cursor after the root symbol
 
     updateDisplay();
   });
 
+  function calculateRoot() {
+    try {
+      // Get the degree (before √ symbol)
+      const rootSymbolPos = currentInput.indexOf("√");
+      const degree = currentInput.substring(0, rootSymbolPos);
+      const degreeNum = degree ? parseInt(degree) : 2;
+
+      // Get the radicand (after √ symbol)
+      const radicand = currentInput.substring(rootSymbolPos + 1);
+      const value = parseFloat(radicand) || 0;
+
+      if (degreeNum === 0 || (degreeNum % 2 === 0 && value < 0)) {
+        currentInput = "Error";
+      } else {
+        const result = Math.pow(value, 1 / degreeNum);
+        currentInput = result.toString();
+
+        history.push({
+          equation: `${degreeNum}√${value}`,
+          result: currentInput,
+        });
+      }
+    } catch (error) {
+      currentInput = "Error";
+    }
+
+    isRootMode = false;
+    rootDegree = "";
+    cursorIndex = currentInput.length;
+    isCalculated = true;
+    updateDisplay();
+  }
   // Fraction button
   $("#fraction").on("click", () => {
     if (isSettingTaxRate || isMuMode || isViewingHistory) return;
@@ -1419,6 +1548,16 @@ $(document).ready(() => {
   $("#left-paren").on("click", () => {
     if (isSettingTaxRate || isMuMode) return;
 
+    if (
+      isRootMode &&
+      currentInput.startsWith("√") &&
+      !currentInput.includes("(")
+    ) {
+      currentInput = currentInput + "(";
+      cursorIndex = currentInput.length;
+      updateDisplay();
+      return;
+    }
     // If we're in fraction mode, add the parenthesis to the active fraction part
     if (isFractionMode) {
       const pos = fractionCursorPos[activeFractionPart];
