@@ -340,11 +340,15 @@ $(document).ready(() => {
   function clearAll() {
     if (isSettingTaxRate) {
       exitTaxRateMode();
+      lastOperation = null;
+      lastValue = null;
       return;
     }
 
     if (isMuMode) {
       exitMuMode();
+      lastOperation = null;
+      lastValue = null;
       return;
     }
 
@@ -352,6 +356,8 @@ $(document).ready(() => {
       isFractionMode = false;
       currentInput = "0";
       cursorIndex = 1;
+      lastOperation = null;
+      lastValue = null;
       updateDisplay();
     } else {
       currentInput = "0";
@@ -401,6 +407,8 @@ $(document).ready(() => {
       currentEquation = "";
       cursorIndex = 1;
       displayScrollPosition = 0;
+      lastOperation = null;
+      lastValue = null;
       updateDisplay();
     }
   }
@@ -484,84 +492,79 @@ $(document).ready(() => {
       isViewingHistory = false;
     }
 
-    // Save the equation before calculating
     const equation = currentInput;
-
-    // Check if this is a complete equation (contains multiple operators)
-    // or just a sequential calculation
-    const operatorCount = (currentInput.match(/[+\-×÷^/]/g) || []).length;
-    const isCompleteEquation = operatorCount > 1;
-
     let result;
 
-    if (isCompleteEquation) {
-      // Use PEMDAS for complete equations
-      result = evaluateWithPEMDAS(currentInput);
+    // Check if we should repeat the last operation
+    if (isCalculated && lastOperation && lastValue !== null) {
+      // Repeat the last operation with the same operand
+      const currentValue = Number.parseFloat(currentInput);
+      switch (lastOperation) {
+        case "+":
+          result = currentValue + lastValue;
+          break;
+        case "-":
+          result = currentValue - lastValue;
+          break;
+        case "×":
+          result = currentValue * lastValue;
+          break;
+        case "÷":
+          result = currentValue / lastValue;
+          break;
+        case "^":
+          result = Math.pow(currentValue, lastValue);
+          break;
+      }
     } else {
-      // Sequential calculation without PEMDAS
-      // Split the input by operators while keeping the operators
-      const tokens = currentInput
-        .split(/([+\-×÷^/])/)
-        .filter((token) => token !== "");
+      // Normal calculation
+      const operatorCount = (currentInput.match(/[+\-×÷^/]/g) || []).length;
+      const isCompleteEquation = operatorCount > 1;
 
-      // Process the tokens sequentially
-      result = Number.parseFloat(tokens[0]);
-      const intermediateResults = [result];
-      const intermediateEquations = [tokens[0]];
+      if (isCompleteEquation) {
+        result = evaluateWithPEMDAS(currentInput);
+      } else {
+        // Sequential calculation
+        const tokens = currentInput
+          .split(/([+\-×÷^/])/)
+          .filter((token) => token !== "");
+        result = Number.parseFloat(tokens[0]);
 
-      for (let i = 1; i < tokens.length; i += 2) {
-        const operator = tokens[i];
-        const operand = Number.parseFloat(tokens[i + 1]);
-
-        // Perform the operation
-        switch (operator) {
-          case "+":
-            result += operand;
-            break;
-          case "-":
-            result -= operand;
-            break;
-          case "×":
-            result *= operand;
-            break;
-          case "÷":
-            if (operand === 0) {
-              console.log("Division by zero error");
-              result = Number.NaN;
-              break;
-            }
-            result /= operand;
-            break;
-          case "^":
-            result = Math.pow(result, operand);
-            break;
-          case "/":
-            if (operand === 0) {
-              console.log("Division by zero error");
-              result = Number.NaN;
-              break;
-            }
-            result /= operand;
-            break;
+        // Store the last operation for repeating
+        if (tokens.length > 1) {
+          lastOperation = tokens[1];
+          lastValue = Number.parseFloat(tokens[2]);
         }
 
-        // Save intermediate result and equation
-        intermediateResults.push(result);
-        intermediateEquations.push(
-          intermediateEquations[intermediateEquations.length - 1] +
-            operator +
-            tokens[i + 1]
-        );
+        for (let i = 1; i < tokens.length; i += 2) {
+          const operator = tokens[i];
+          const operand = Number.parseFloat(tokens[i + 1]);
+
+          switch (operator) {
+            case "+":
+              result += operand;
+              break;
+            case "-":
+              result -= operand;
+              break;
+            case "×":
+              result *= operand;
+              break;
+            case "÷":
+              result /= operand;
+              break;
+            case "^":
+              result = Math.pow(result, operand);
+              break;
+          }
+        }
       }
     }
 
     if (isNaN(result) || !isFinite(result)) {
-      console.log("Calculation error: result is NaN or Infinity");
       currentInput = "Error";
     } else {
-      // Format the result
       currentInput = Number.parseFloat(result.toFixed(10)).toString();
-      // Remove trailing zeros
       if (currentInput.includes(".")) {
         currentInput = currentInput.replace(/\.?0+$/, "");
       }
@@ -571,7 +574,6 @@ $(document).ready(() => {
     isCalculated = true;
     displayScrollPosition = 0;
 
-    // Add to history - store equation, result, and intermediate results
     history.push({
       equation: equation,
       result: currentInput,
@@ -579,9 +581,6 @@ $(document).ready(() => {
     historyIndex = history.length;
 
     updateDisplay();
-
-    // Save for repeat operations
-    lastValue = Number.parseFloat(currentInput);
   }
 
   function calculateMarkup() {
@@ -1083,8 +1082,6 @@ $(document).ready(() => {
   $("#equals").on("click", () => {
     if (isFractionMode) {
       calculateFraction();
-    } else if (isCalculated) {
-      repeatLastOperation();
     } else {
       calculate();
     }
